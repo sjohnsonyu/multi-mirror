@@ -13,7 +13,7 @@ USE_NEIGHBOR = True   # use neighboring cells
 
 
 def convert_to_a(raw_a, param_int, use_torch=False):
-    """ convert raw value (e.g., from nature strategy) to attractiveness """
+    """ convert raw value (e.g., from nature strategy) to attractiveness_poaching """
     if use_torch:
         a = torch.tanh(raw_a)
         a = (a + 1.) / 2.
@@ -28,58 +28,76 @@ def convert_to_a(raw_a, param_int, use_torch=False):
     return a
 
 class Park:
-    def __init__(self, attractiveness, initial_effort, initial_wildlife, initial_attack,
-            height, width, n_targets, budget, horizon,
-            psi, alpha, beta, eta, verbose=False, param_int=None):
+    def __init__(self,
+                 attractiveness_poaching,  # TODO add in attractiveness of logging
+                 initial_effort,
+                 initial_wildlife,
+                 initial_trees,  # TODO use in this class!
+                 initial_attack,
+                 height,
+                 width,
+                 n_targets,
+                 budget,
+                 horizon,
+                 psi,
+                 alpha,
+                 beta,
+                 eta,
+                 verbose=False,
+                 param_int=None):
         """
-        attractiveness: will be torch.tensor (if tracking gradients for Nature oracle)
+        attractiveness_poaching: will be torch.tensor (if tracking gradients for Nature oracle)
                         or np.ndarray (if agent oracle)
-        param_int: optional parameter; if set for Nature oracle, then attractiveness
+        param_int: optional parameter; if set for Nature oracle, then attractiveness_poaching
                    values will be computed through a sigmoid
         """
 
         # if true, use torch (instead of numpy) to track gradients
         # used by nature oracle
-        self.use_tensor = torch.is_tensor(attractiveness)
+        self.use_tensor = torch.is_tensor(attractiveness_poaching)
 
         # store initial values for resetting
         if self.use_tensor:
             self.initial_wildlife = initial_wildlife
-            self.initial_effort   = initial_effort
-            self.initial_attack   = initial_attack
-            self.effort           = torch.FloatTensor(initial_effort)
-            self.wildlife         = torch.FloatTensor(initial_wildlife)
-            self.past_attack      = torch.FloatTensor(initial_attack)
+            self.initial_trees = initial_trees
+            self.initial_effort = initial_effort
+            self.initial_attack = initial_attack
+            self.effort = torch.FloatTensor(initial_effort)
+            self.wildlife = torch.FloatTensor(initial_wildlife)
+            self.trees = torch.FloatTensor(initial_trees)
+            self.past_attack = torch.FloatTensor(initial_attack)
         else:
             self.initial_wildlife = np.array(initial_wildlife)
-            self.initial_effort   = np.array(initial_effort)
-            self.initial_attack   = np.array(initial_attack)
-            self.effort           = np.array(initial_effort)
-            self.wildlife         = np.array(initial_wildlife)
-            self.past_attack      = np.array(initial_attack)
+            self.initial_trees = np.array(initial_trees)
+            self.initial_effort = np.array(initial_effort)
+            self.initial_attack = np.array(initial_attack)
+            self.effort = np.array(initial_effort)
+            self.wildlife = np.array(initial_wildlife)
+            self.trees = np.array(initial_trees)
+            self.past_attack = np.array(initial_attack)
 
-        self.height    = height
-        self.width     = width
+        self.height = height
+        self.width = width
         self.n_targets = n_targets
         self.state_dim = 2 * n_targets + 1
         self.action_dim = n_targets
 
         assert height * width == n_targets
 
-        self.budget         = budget
+        self.budget = budget
 
-        # note that attractiveness here is not the final value; it is
+        # note that attractiveness_poaching here is not the final value; it is
         # the input to the sigmoid
         self.param_int = param_int
-        self.attractiveness = attractiveness
+        self.attractiveness_poaching = attractiveness_poaching
 
         self.t = 0 # timestep
         self.horizon = horizon
 
-        self.psi   = psi    # wildlife growth ratio
+        self.psi = psi    # wildlife growth ratio
         self.alpha = alpha  # strength that poachers eliminate wildlife
-        self.beta  = beta   # coefficient on current effort - likelihood of finding snares
-        self.eta   = eta    # effect of neighbors
+        self.beta = beta   # coefficient on current effort - likelihood of finding snares
+        self.eta = eta    # effect of neighbors
 
         def i_to_xy(i):
             x = math.floor(i / self.width)
@@ -151,7 +169,7 @@ class Park:
         self.t += 1
 
         info = {'expected_reward': expected_reward}  # dict for debugging
-        return self.get_state(use_torch), self.get_reward(), self.is_terminal(), info
+        return self.get_state(use_torch), self.get_reward_wildlife(), self.is_terminal(), info
 
 
     def get_state(self, use_torch):
@@ -164,14 +182,18 @@ class Park:
             return torch.cat((self.wildlife, self.effort, torch.FloatTensor([self.t])))
         else:
             return np.concatenate((self.wildlife, self.effort, np.array([self.t])))
-
+        
+        # NOTE broken for use_torch = True
         return state
 
     def get_effort(self):
         return self.effort
 
-    def get_wildlife(self):
-        return self.wildlife
+    # def get_wildlife(self):
+    #     return self.wildlife
+
+    # def get_trees(self):
+    #     return self.trees
 
     def get_attack(self):
         return self.past_attack
@@ -181,27 +203,33 @@ class Park:
 
         return self.t == self.horizon
 
-    def get_reward(self):
+    def get_reward_wildlife(self):
         """ compute reward, defined as sum of wildlife """
         return self.wildlife.sum()
+
+    def get_reward_trees(self):
+        """ compute reward, defined as sum of trees """
+        return self.trees.sum()
 
     def reset(self):
         self.t = 0
         if self.use_tensor:
-            self.effort         = torch.FloatTensor(self.initial_effort)
-            self.wildlife       = torch.FloatTensor(self.initial_wildlife)
-            self.past_attack    = torch.FloatTensor(self.initial_attack)
+            self.effort = torch.FloatTensor(self.initial_effort)
+            self.wildlife = torch.FloatTensor(self.initial_wildlife)
+            self.trees = torch.FloatTensor(self.initial_trees)
+            self.past_attack = torch.FloatTensor(self.initial_attack)
         else:
-            self.effort         = np.array(self.initial_effort)
-            self.wildlife       = np.array(self.initial_wildlife)
-            self.past_attack    = np.array(self.initial_attack)
+            self.effort = np.array(self.initial_effort)
+            self.wildlife = np.array(self.initial_wildlife)
+            self.trees = np.array(self.initial_trees)
+            self.past_attack = np.array(self.initial_attack)
 
         return self.get_state(self.use_tensor)
 
 
     def adv_behavior(self, past_w, past_c, use_torch=False):
         ''' adversary response function
-        a:       attractiveness
+        a:       attractiveness_poaching
         beta:    responsiveness
         past_c:  past effort
         eta:     neighbor effort response
@@ -210,9 +238,9 @@ class Park:
         assert self.eta >= 0, self.eta
 
         if self.param_int is not None:
-            a = convert_to_a(self.attractiveness, self.param_int, use_torch=use_torch)
+            a = convert_to_a(self.attractiveness_poaching, self.param_int, use_torch=use_torch)
         else:
-            a = self.attractiveness
+            a = self.attractiveness_poaching
 
         # whether to include displacement effect
         past_neigh = self.get_neighbor_effort(past_c, use_torch)
@@ -237,18 +265,8 @@ class Park:
         past_a:  past poacher action
         '''
         assert self.psi >= 1, f'psi is {self.psi}'
-
-        if torch.is_tensor(past_a):
-            assert torch.all(past_a <= 1.), 'past_a has val > 1 {}'.format(past_a)
-            assert torch.all(past_a >= 0.), 'past_a has val < 0 {}'.format(past_a)
-        else:
-            assert np.all(past_a <= 1.), 'past_a has val > 1 {}'.format(past_a)
-            assert np.all(past_a >= 0.), 'past_a has val < 0 {}'.format(past_a)
-
-        if torch.is_tensor(past_c):
-            assert torch.all(past_c <= 1.), 'past_c has val > 1 {}'.format(past_c)
-        else:
-            assert np.all(past_c <= 1.), 'past_c has val > 1 {}'.format(past_c)
+        self.validate_past_a(past_a)
+        self.validate_past_c(past_c)
 
         # if rangers used full patrol, they stop all attacks
         effort_multiplier = 1. - past_c
@@ -265,6 +283,49 @@ class Park:
             np.clip(curr_w, 0, None, out=curr_w)
 
         return curr_w
+
+    def tree_response(self, past_w, past_a, past_c, use_torch=False):
+        ''' tree response function
+        psi:     tree growth ratio
+        past_w:  past tree count
+        alpha:   responsiveness to past poaching
+        past_a:  past poacher action
+        '''
+        assert self.psi >= 1, f'psi is {self.psi}'
+
+        self.validate_past_a(past_a)
+        self.validate_past_c(past_c)
+
+        # if rangers used full patrol, they stop all attacks
+        effort_multiplier = 1. - past_c
+
+        if use_torch:
+            curr_w = torch.FloatTensor(past_w**self.psi) - (self.alpha * past_a * effort_multiplier)
+            curr_w = torch.clamp(curr_w, 0, None)
+        else:
+            if torch.is_tensor(past_a):
+                past_a = past_a.detach().numpy()
+            if torch.is_tensor(past_w):
+                past_w = past_w.detach().numpy()
+            curr_w = past_w**self.psi - (self.alpha * past_a * effort_multiplier)
+            np.clip(curr_w, 0, None, out=curr_w)
+
+        return curr_w
+    
+    def validate_past_a(self, past_a):
+        if torch.is_tensor(past_a):
+            assert torch.all(past_a <= 1.), 'past_a has val > 1 {}'.format(past_a)
+            assert torch.all(past_a >= 0.), 'past_a has val < 0 {}'.format(past_a)
+        else:
+            assert np.all(past_a <= 1.), 'past_a has val > 1 {}'.format(past_a)
+            assert np.all(past_a >= 0.), 'past_a has val < 0 {}'.format(past_a)
+    
+    def validate_past_c(self, past_c):
+        # I think past_c is past patrol effort
+        if torch.is_tensor(past_c):
+            assert torch.all(past_c <= 1.), 'past_c has val > 1 {}'.format(past_c)
+        else:
+            assert np.all(past_c <= 1.), 'past_c has val > 1 {}'.format(past_c)
 
 
     def get_neighbor_effort(self, past_c, use_torch=False):

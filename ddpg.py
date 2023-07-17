@@ -164,9 +164,9 @@ class DDPG:
 
     def update(self, batch_size):
         states, actions, rewards, next_states, dones = self.memory.sample(batch_size)
-        states      = torch.FloatTensor(states)
-        actions     = torch.FloatTensor(actions)
-        rewards     = torch.FloatTensor(rewards)
+        states = torch.FloatTensor(states)
+        actions = torch.FloatTensor(actions)
+        rewards = torch.FloatTensor(rewards)
         next_states = torch.FloatTensor(next_states)
 
         # update critic by minimizing loss

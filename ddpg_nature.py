@@ -18,12 +18,16 @@ from collections import deque
 
 
 class NatureDDPG:
-    def __init__(self, n_targets, attractiveness,
-        hidden_size=256, actor_learning_rate=1e-3,
-        critic_learning_rate=1e-3,
-        attractiveness_learning_rate=1e-2,
-        gamma=0.99, tau=1e-2,
-        memory_max_size=50000):
+    def __init__(self,
+                 n_targets,
+                 attractiveness,
+                 hidden_size=256,
+                 actor_learning_rate=1e-3,
+                 critic_learning_rate=1e-3,
+                 attractiveness_learning_rate=1e-2,
+                 gamma=0.99,
+                 tau=1e-2,
+                 memory_max_size=50000):
 
         # params
         self.states_dim = 3 * n_targets + 1  # effort, wildlife, attractiveness, timestep

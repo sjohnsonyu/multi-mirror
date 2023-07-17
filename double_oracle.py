@@ -28,12 +28,29 @@ if not os.path.exists('plots'):
 
 
 class DoubleOracle:
-    def __init__(self, max_epochs, height, width, budget, horizon,
-                n_perturb, n_eval, agent_n_train, nature_n_train,
-                attract_vals, psi, alpha, beta, eta,
-                max_interval, wildlife_setting, use_wake,
-                checkpoints, freeze_policy_step, freeze_a_step,
-                ):
+    def __init__(self,
+                 max_epochs,
+                 height,
+                 width,
+                 budget,
+                 horizon,
+                 n_perturb,
+                 n_eval,
+                 agent_n_train,
+                 nature_n_train,
+                 hunting_attract_vals,
+                 logging_attract_vals,
+                 psi,
+                 alpha,
+                 beta,
+                 eta,
+                 max_interval,
+                 wildlife_setting,
+                 use_wake,
+                 checkpoints,
+                 freeze_policy_step,
+                 freeze_a_step
+                 ):
         self.max_epochs  = max_epochs
 
         self.park_height = height
@@ -46,13 +63,22 @@ class DoubleOracle:
         self.n_perturb = n_perturb
 
         # attractiveness parameter interval
-        int = np.random.uniform(0, max_interval, size=self.n_targets)
-        self.param_int = [(attract_vals[i]-int[i], attract_vals[i]+int[i]) for i in range(self.n_targets)]
-        self.param_int = [(attract_vals[i], attract_vals[i]+int[i]) for i in range(self.n_targets)]
-        print('param_int', [tuple(np.round(int, 2)) for int in self.param_int])
+        hunting_int = np.random.uniform(0, max_interval, size=self.n_targets)
+        self.hunting_param_int = [(hunting_attract_vals[i]-hunting_int[i], hunting_attract_vals[i]+hunting_int[i]) for i in range(self.n_targets)]
+        self.hunting_param_int = [(hunting_attract_vals[i], hunting_attract_vals[i]+hunting_int[i]) for i in range(self.n_targets)]
+        print('hunting_param_int', [tuple(np.round(hunting_int, 2)) for hunting_int in self.hunting_param_int])
 
-        self.param_int = np.array(self.param_int)
-        assert np.all(self.param_int[:, 1] >= self.param_int[:, 0])
+        self.hunting_param_int = np.array(self.hunting_param_int)
+        assert np.all(self.hunting_param_int[:, 1] >= self.hunting_param_int[:, 0])
+
+        # TODO: add some way to specify how correlated the hunting and logging are
+        logging_int = np.random.uniform(0, max_interval, size=self.n_targets)
+        self.logging_param_int = [(logging_attract_vals[i]-logging_int[i], logging_attract_vals[i]+logging_int[i]) for i in range(self.n_targets)]
+        self.logging_param_int = [(logging_attract_vals[i], logging_attract_vals[i]+logging_int[i]) for i in range(self.n_targets)]
+        print('logging_param_int', [tuple(np.round(logging_int, 2)) for logging_int in self.logging_param_int])
+
+        self.logging_param_int = np.array(self.logging_param_int)
+        assert np.all(self.logging_param_int[:, 1] >= self.logging_param_int[:, 0])
 
         def gkern(kernlen=21, std=3):
             """ returns a 2D Gaussian kernel array """
@@ -60,36 +86,43 @@ class DoubleOracle:
             gkern2d = np.outer(gkern1d, gkern1d)
             return gkern2d.flatten()
 
+        # TODO: disaggregate between wildlife and trees!
         if wildlife_setting == 1: # random
             initial_wildlife = np.random.rand(self.n_targets) * 3
+            initial_trees = np.random.rand(self.n_targets) * 3
         elif wildlife_setting == 2: # gaussian kernel - peaked
             assert height == width
             initial_wildlife = gkern(height, 1.5) * 3
+            initial_trees = gkern(height, 1.5) * 3
         elif wildlife_setting == 3: # gaussian kernel - not very peaked
             assert height == width
             initial_wildlife = gkern(height, 5) * 3
+            initial_trees = gkern(height, 5) * 3
         else:
             raise Exception('wildlife setting {} not implemented'.format(wildlife_setting))
 
 
         # setup park parameters dict
         self.park_params = {
-          'height':           self.park_height,
-          'width':            self.park_width,
-          'budget':           self.budget,
-          'horizon':          self.horizon,
-          'n_targets':        self.n_targets,
-          'initial_effort':   np.zeros(self.n_targets),
+          'height': self.park_height,
+          'width': self.park_width,
+          'budget': self.budget,
+          'horizon': self.horizon,
+          'n_targets': self.n_targets,
+          'initial_effort': np.zeros(self.n_targets),
           'initial_wildlife': initial_wildlife,
-          'initial_attack':   np.zeros(self.n_targets),
-          'param_int':        self.param_int,
-          'psi':   psi,
+          'initial_trees': initial_trees,
+          'initial_attack': np.zeros(self.n_targets),
+          'param_int': self.hunting_param_int,
+          'logging_param_int': self.logging_param_int,
+          'psi': psi,
           'alpha': alpha,
-          'beta':  beta,
-          'eta':   eta
+          'beta': beta,
+          'eta': eta
         }
 
         print('initial wildlife {:.2f} {}'.format(np.sum(initial_wildlife), np.round(initial_wildlife, 2)))
+        print('initial trees {:.2f} {}'.format(np.sum(initial_trees), np.round(initial_trees, 2)))
 
 
         self.agent_oracle  = AgentOracle(self.park_params, checkpoints, agent_n_train, n_eval)
@@ -350,12 +383,18 @@ if __name__ == '__main__':
     np.random.seed(seed)
 
     data_filename = './data/sample.p'
+    # TODO: where did this data come from?
     data = pickle.load(open(data_filename, 'rb'))
-    start_idx = np.random.randint(len(data['attract_vals'][0]) - height*width)
-    attract_vals = data['attract_vals'][0][start_idx:start_idx + height*width] # pick random series of attractiveness values
-    print('attract_vals', np.round(attract_vals, 2))
-    attract_vals = np.array(attract_vals) + 13
-    print('attract_vals', np.round(attract_vals, 2))
+    hunting_start_idx = np.random.randint(len(data['attract_vals'][0]) - height*width)
+    logging_start_idx = np.random.randint(len(data['attract_vals'][0]) - height*width)
+    hunting_attract_vals = data['attract_vals'][0][hunting_start_idx:hunting_start_idx + height*width] # pick random series of attractiveness values
+    logging_attract_vals = data['attract_vals'][0][logging_start_idx:logging_start_idx + height*width] # pick random series of attractiveness values
+    print('hunting_attract_vals', np.round(hunting_attract_vals, 2))
+    print('logging_attract_vals', np.round(logging_attract_vals, 2))
+    hunting_attract_vals = np.array(hunting_attract_vals) + 13
+    logging_attract_vals = np.array(logging_attract_vals) + 13
+    print('hunting_attract_vals', np.round(hunting_attract_vals, 2))
+    print('logging_attract_vals', np.round(logging_attract_vals, 2))
 
     psi     = 1.1 # wildlife growth ratio
     alpha   = .5  # strength that poachers eliminate wildlife
@@ -378,7 +417,7 @@ if __name__ == '__main__':
 
     do = DoubleOracle(max_epochs, height, width, budget, horizon,
         n_perturb, n_eval, agent_n_train, nature_n_train,
-        attract_vals, psi, alpha, beta, eta,
+        hunting_attract_vals, logging_attract_vals, psi, alpha, beta, eta,
         max_interval, wildlife_setting, use_wake,
         checkpoints, freeze_policy_step, freeze_a_step)
 
@@ -389,7 +428,7 @@ if __name__ == '__main__':
     baseline_middle_i = len(do.agent_strategies)
     start_time = time.time()
     for i in range(n_perturb+1):
-        baseline_middle = use_middle(do.param_int, do.agent_oracle)
+        baseline_middle = use_middle(do.hunting_param_int, do.agent_oracle)
         do.update_payoffs_agent(baseline_middle)
     middle_time = (time.time() - start_time) / (n_perturb+1)
     print('baseline middle runtime {:.1f} seconds'.format(middle_time))
@@ -431,7 +470,7 @@ if __name__ == '__main__':
     print('Nature attractiveness mixed strategy ', np.round(nature_eq, 4))
     print('Nature attractiveness are')
     for nature_strategy in do.nature_strategies:
-        a = convert_to_a(nature_strategy, do.param_int)
+        a = convert_to_a(nature_strategy, do.hunting_param_int)
         print('   ', np.round(a, 3))
 
     print()

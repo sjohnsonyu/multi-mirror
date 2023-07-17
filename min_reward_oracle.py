@@ -17,11 +17,11 @@ def smooth(x, window_len=11, window='hanning'):
     assert x.size >= window_len, "Input vector needs to be bigger than window size."
     if window_len < 3:
         return x
-    assert window in ['flat', 'hanning', 'hamming', 'bartlett', 'blackman'], "Window is on of 'flat', 'hanning', 'hamming', 'bartlett', 'blackman'"
+    assert window in ['flat', 'hanning', 'hamming', 'bartlett', 'blackman'], "Window is one of 'flat', 'hanning', 'hamming', 'bartlett', 'blackman'"
 
     s = np.r_[x[window_len-1:0:-1], x, x[-1:-window_len:-1]]
 
-    if window == 'flat': #moving average
+    if window == 'flat':  # moving average
         w = np.ones(window_len, 'd')
     else:
         w = eval('np.'+window+'(window_len)')
@@ -51,9 +51,21 @@ def min_reward(park_params, def_strategy, attractiveness_learning_rate=5e-2,
 
     print('initial {}'.format(attractiveness))
 
-    env = Park(attractiveness, park_params['initial_effort'], park_params['initial_wildlife'], park_params['initial_attack'],
-        park_params['height'], park_params['width'], park_params['n_targets'], park_params['budget'], park_params['horizon'],
-        park_params['psi'], park_params['alpha'], park_params['beta'], park_params['eta'], param_int=park_params['param_int'])
+    env = Park(attractiveness,
+               park_params['initial_effort'],
+               park_params['initial_wildlife'],
+               park_params['initial_trees'],
+               park_params['initial_attack'],
+               park_params['height'],
+               park_params['width'],
+               park_params['n_targets'],
+               park_params['budget'],
+               park_params['horizon'],
+               park_params['psi'],
+               park_params['alpha'],
+               park_params['beta'],
+               park_params['eta'],
+               param_int=park_params['param_int'])
 
     state = env.reset()
 
@@ -83,7 +95,8 @@ def min_reward(park_params, def_strategy, attractiveness_learning_rate=5e-2,
 
         all_r.append(loss)
 
-    all_r = np.array(all_r)  / batch_size
+    # all_r = np.array(all_r)  / batch_size
+    all_r = np.array([r.detach() for r in all_r])
 
     if visualize:
         plt.plot(smooth(all_r, window_len=40))

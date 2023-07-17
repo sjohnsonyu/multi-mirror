@@ -25,8 +25,13 @@ def sample_strategy(distrib):
 
 
 class NatureOracle:
-    def __init__(self, park_params, checkpoints, n_train,
-        use_wake, freeze_policy_step, freeze_a_step):
+    def __init__(self,
+                 park_params,
+                 checkpoints,
+                 n_train,
+                 use_wake,
+                 freeze_policy_step,
+                 freeze_a_step):
         """
         use_wake: whether to use wake/sleep option
         freeze_policy_step: how often to freeze policy
@@ -68,7 +73,7 @@ class NatureOracle:
         ddpg = NatureDDPG(self.park_params['n_targets'], attractiveness, actor_learning_rate=10, critic_learning_rate=10)
 
         batch_size  = 10
-        rewards     = []
+        rewards = []
         avg_rewards = []
 
         def get_agent_avg_reward(env, agent_strategy, n_iter=100):
@@ -92,14 +97,27 @@ class NatureOracle:
 
         total_step = 0
 
-        env = Park(attractiveness, self.park_params['initial_effort'], self.park_params['initial_wildlife'], self.park_params['initial_attack'],
-            self.park_params['height'], self.park_params['width'], self.park_params['n_targets'], self.park_params['budget'], self.park_params['horizon'],
-            self.park_params['psi'], self.park_params['alpha'], self.park_params['beta'], self.park_params['eta'], param_int=self.park_params['param_int'])
+        env = Park(attractiveness,
+                   self.park_params['initial_effort'],
+                   self.park_params['initial_wildlife'],
+                   self.park_params['initial_trees'],
+                   self.park_params['initial_attack'],
+                   self.park_params['height'],
+                   self.park_params['width'],
+                   self.park_params['n_targets'],
+                   self.park_params['budget'],
+                   self.park_params['horizon'],
+                   self.park_params['psi'],
+                   self.park_params['alpha'],
+                   self.park_params['beta'],
+                   self.park_params['eta'],
+                   param_int=self.park_params['param_int'])
 
         # memoize agent average reward for each policy
         agent_avg_rewards = []
         for agent_strategy in agent_strategies:
-            agent_avg_rewards.append(get_agent_avg_reward(env, agent_strategy))
+            agent_avg_rewards.append(get_agent_avg_reward(env,
+                       agent_strategy))
 
         print('agent strategies', len(agent_strategies))
         print('avg rewards', len(agent_avg_rewards), np.array([np.round(r.detach().numpy(), 2) for r in agent_avg_rewards]))
@@ -126,9 +144,21 @@ class NatureOracle:
                 updating_a = True
                 updating_policy = True
 
-            env = Park(attractiveness, self.park_params['initial_effort'], self.park_params['initial_wildlife'], self.park_params['initial_attack'],
-                self.park_params['height'], self.park_params['width'], self.park_params['n_targets'], self.park_params['budget'], self.park_params['horizon'],
-                self.park_params['psi'], self.park_params['alpha'], self.park_params['beta'], self.park_params['eta'], param_int=self.park_params['param_int'])
+            env = Park(attractiveness,
+                       self.park_params['initial_effort'],
+                       self.park_params['initial_wildlife'],
+                       self.park_params['initial_trees'],
+                       self.park_params['initial_attack'],
+                       self.park_params['height'],
+                       self.park_params['width'],
+                       self.park_params['n_targets'],
+                       self.park_params['budget'],
+                       self.park_params['horizon'],
+                       self.park_params['psi'],
+                       self.park_params['alpha'],
+                       self.park_params['beta'],
+                       self.park_params['eta'],
+                       param_int=self.park_params['param_int'])
 
             state = env.reset()
             episode_reward = 0

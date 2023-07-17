@@ -24,9 +24,9 @@ class AgentOracle:
     def __init__(self, park_params, checkpoints, n_train, n_eval):
         self.park_params = park_params
         self.checkpoints = checkpoints
-        self.n_train     = n_train
-        self.n_eval      = n_eval
-        self.budget      = park_params['budget']
+        self.n_train = n_train
+        self.n_eval = n_eval
+        self.budget = park_params['budget']
 
     def simulate_reward(self, def_strategies, nature_strategies, def_distrib=None, nature_distrib=None, display=True):
         """ this is similar to evaluate_DDPG() from defender_oracle_evaluation.py
@@ -54,9 +54,21 @@ class AgentOracle:
                 def_strategy = def_strategies[def_strategy_i]
 
             park_params = self.park_params
-            env = Park(attractiveness, park_params['initial_effort'], park_params['initial_wildlife'], park_params['initial_attack'],
-                    park_params['height'], park_params['width'], park_params['n_targets'], park_params['budget'], park_params['horizon'],
-                    park_params['psi'], park_params['alpha'], park_params['beta'], park_params['eta'], param_int=park_params['param_int'])
+            env = Park(attractiveness,
+                       park_params['initial_effort'],
+                       park_params['initial_wildlife'],
+                       park_params['initial_trees'],
+                       park_params['initial_attack'],
+                       park_params['height'],
+                       park_params['width'],
+                       park_params['n_targets'],
+                       park_params['budget'],
+                       park_params['horizon'],
+                       park_params['psi'],
+                       park_params['alpha'],
+                       park_params['beta'],
+                       park_params['eta'],
+                       param_int=park_params['param_int'])
 
             # initialize the environment and state
             state = env.reset()
@@ -89,7 +101,12 @@ class AgentOracle:
 
     def best_response(self, nature_strategies, nature_distrib, display=False):
         assert len(nature_strategies) == len(nature_distrib), 'nature strategies {}, distrib {}'.format(len(nature_strategies), len(nature_distrib))
-        br, checkpoint_rewards = run_DDPG(self.park_params, nature_strategies, nature_distrib, self.checkpoints, self.n_train, display=display)
+        br, checkpoint_rewards = run_DDPG(self.park_params,
+                                          nature_strategies,
+                                          nature_distrib,
+                                          self.checkpoints,
+                                          self.n_train,
+                                          display=display)
 
         return br
 
@@ -114,9 +131,20 @@ def run_DDPG(park_params, nature_strategies, nature_distrib, checkpoints, n_trai
         nature_strategy_i = sample_strategy(nature_distrib)
         attractiveness = nature_strategies[nature_strategy_i]
 
-        park = Park(attractiveness, park_params['initial_effort'], park_params['initial_wildlife'], park_params['initial_attack'],
-                park_params['height'], park_params['width'], park_params['n_targets'], park_params['budget'], park_params['horizon'],
-                park_params['psi'], park_params['alpha'], park_params['beta'], park_params['eta'])
+        park = Park(attractiveness,
+                    park_params['initial_effort'],
+                    park_params['initial_wildlife'],
+                    park_params['initial_trees'],
+                    park_params['initial_attack'],
+                    park_params['height'],
+                    park_params['width'],
+                    park_params['n_targets'],
+                    park_params['budget'],
+                    park_params['horizon'],
+                    park_params['psi'],
+                    park_params['alpha'],
+                    park_params['beta'],
+                    park_params['eta'])
 
         # initialize the environment and state
         state = park.reset()

@@ -13,7 +13,7 @@ USE_NEIGHBOR = True   # use neighboring cells
 
 
 def convert_to_a(raw_a, param_int, use_torch=False):
-    """ convert raw value (e.g., from nature strategy) to attractiveness_poaching """
+    """ convert raw value (e.g., from nature strategy) to attractiveness """
     if use_torch:
         a = torch.tanh(raw_a)
         a = (a + 1.) / 2.
@@ -29,7 +29,7 @@ def convert_to_a(raw_a, param_int, use_torch=False):
 
 class Park:
     def __init__(self,
-                 attractiveness_poaching,  # TODO add in attractiveness of logging
+                 attractiveness,  # TODO add in attractiveness of logging
                  initial_effort,
                  initial_wildlife,
                  initial_trees,  # TODO use in this class!
@@ -43,18 +43,22 @@ class Park:
                  alpha,
                  beta,
                  eta,
+                 threat_mode,
                  verbose=False,
                  param_int=None):
         """
-        attractiveness_poaching: will be torch.tensor (if tracking gradients for Nature oracle)
+        attractiveness: will be torch.tensor (if tracking gradients for Nature oracle)
                         or np.ndarray (if agent oracle)
-        param_int: optional parameter; if set for Nature oracle, then attractiveness_poaching
+        param_int: optional parameter; if set for Nature oracle, then attractiveness
                    values will be computed through a sigmoid
         """
 
         # if true, use torch (instead of numpy) to track gradients
         # used by nature oracle
-        self.use_tensor = torch.is_tensor(attractiveness_poaching)
+        self.use_tensor = torch.is_tensor(attractiveness)
+        
+        assert threat_mode in ('poaching', 'logging'), "threat_mode must be either 'poaching' or 'logging'"
+        self.threat_mode = threat_mode
 
         # store initial values for resetting
         if self.use_tensor:
@@ -76,6 +80,17 @@ class Park:
             self.trees = np.array(initial_trees)
             self.past_attack = np.array(initial_attack)
 
+        if self.threat_mode == 'poaching':
+            self.resource = self.wildlife
+            self.initial_resource = self.initial_wildlife
+            # self.get_reward_resource = self.get_reward_wildlife
+        else:
+            self.resource = self.trees
+            self.initial_resource = self.initial_trees
+            # self.get_reward_resource = self.get_reward_trees
+            # print("Ignoring assumption that trees don't regrow")
+            # self.psi = 1  # assume trees don't regrow
+
         self.height = height
         self.width = width
         self.n_targets = n_targets
@@ -86,10 +101,10 @@ class Park:
 
         self.budget = budget
 
-        # note that attractiveness_poaching here is not the final value; it is
+        # note that attractiveness here is not the final value; it is
         # the input to the sigmoid
         self.param_int = param_int
-        self.attractiveness_poaching = attractiveness_poaching
+        self.attractiveness = attractiveness
 
         self.t = 0 # timestep
         self.horizon = horizon
@@ -141,7 +156,8 @@ class Park:
         # ensure action is legal
         assert action.sum() <= self.budget + 1e-5
 
-        p_attack = self.adv_behavior(self.wildlife, action, use_torch)
+        # p_attack = self.adv_behavior(self.wildlife, action, use_torch)
+        p_attack = self.adv_behavior(self.resource, action, use_torch)
 
         if use_torch:
             curr_attack = torch.bernoulli(p_attack)
@@ -154,34 +170,35 @@ class Park:
         else:
             self.effort = action
 
-        curr_wildlife = self.wildlife_response(self.wildlife, curr_attack, action, use_torch)
+        curr_resource = self.resource_response(self.resource, curr_attack, action, use_torch)
 
         # instead of using stochastic draw of attack, compute expected attack
-        expected_wildlife = self.wildlife_response(self.wildlife, p_attack, action, use_torch)
-        expected_reward = expected_wildlife.sum()
+        expected_resource = self.resource_response(self.resource, p_attack, action, use_torch)
+        expected_reward = expected_resource.sum()
 
         if self.verbose:
-            print('pattack', np.around(p_attack, 5), '  attack', curr_attack, '  wildlife', np.around(curr_wildlife, 2))
+            population_str = 'wildlife' if self.threat_mode == 'poaching' else 'trees'
+            print('pattack', np.around(p_attack, 5), '  attack', curr_attack, f'  {population_str}', np.around(curr_resource, 2))
 
-        self.wildlife = curr_wildlife
+        self.resource = curr_resource
         self.past_attack = curr_attack
 
         self.t += 1
 
         info = {'expected_reward': expected_reward}  # dict for debugging
-        return self.get_state(use_torch), self.get_reward_wildlife(), self.is_terminal(), info
+        return self.get_state(use_torch), self.get_reward_resource(), self.is_terminal(), info
 
 
     def get_state(self, use_torch):
         """ state is a tensor of dimension n_target * 2
-        [curr_wildlife, curr_effort]
+        [curr_resource, curr_effort]
         """
         if use_torch:
-            assert torch.is_tensor(self.wildlife), 'wildlife not tensor {}'.format(self.wildlife)
+            assert torch.is_tensor(self.resource), 'resource not tensor {}'.format(self.resource)
             assert torch.is_tensor(self.effort), 'effort not tensor {}'.format(self.effort)
-            return torch.cat((self.wildlife, self.effort, torch.FloatTensor([self.t])))
+            return torch.cat((self.resource, self.effort, torch.FloatTensor([self.t])))
         else:
-            return np.concatenate((self.wildlife, self.effort, np.array([self.t])))
+            return np.concatenate((self.resource, self.effort, np.array([self.t])))
         
         # NOTE broken for use_torch = True
         return state
@@ -195,6 +212,10 @@ class Park:
     # def get_trees(self):
     #     return self.trees
 
+    def get_initial_state(self):
+        assert self.use_tensor == False
+        return np.concatenate((self.initial_resource, self.effort, np.array([0])))
+
     def get_attack(self):
         return self.past_attack
 
@@ -203,13 +224,15 @@ class Park:
 
         return self.t == self.horizon
 
-    def get_reward_wildlife(self):
-        """ compute reward, defined as sum of wildlife """
-        return self.wildlife.sum()
+    # def get_reward_wildlife(self):
+    #     """ compute reward, defined as sum of wildlife """
+    #     return self.wildlife.sum()
 
-    def get_reward_trees(self):
-        """ compute reward, defined as sum of trees """
-        return self.trees.sum()
+    # def get_reward_trees(self):
+    #     """ compute reward, defined as sum of trees """
+    #     return self.trees.sum()
+    def get_reward_resource(self):
+        return self.resource.sum()
 
     def reset(self):
         self.t = 0
@@ -223,24 +246,29 @@ class Park:
             self.wildlife = np.array(self.initial_wildlife)
             self.trees = np.array(self.initial_trees)
             self.past_attack = np.array(self.initial_attack)
+        
+        if self.threat_mode == 'poaching':
+            self.resource = self.wildlife
+        else:
+            self.resource = self.trees
 
         return self.get_state(self.use_tensor)
 
 
     def adv_behavior(self, past_w, past_c, use_torch=False):
         ''' adversary response function
-        a:       attractiveness_poaching
+        a:       attractiveness
         beta:    responsiveness
-        past_c:  past effort
+        past_c:  past effort (this is the same thing as action, apparently)
         eta:     neighbor effort response
         '''
         assert self.beta < 0, self.beta
         assert self.eta >= 0, self.eta
 
         if self.param_int is not None:
-            a = convert_to_a(self.attractiveness_poaching, self.param_int, use_torch=use_torch)
+            a = convert_to_a(self.attractiveness, self.param_int, use_torch=use_torch)
         else:
-            a = self.attractiveness_poaching
+            a = self.attractiveness
 
         # whether to include displacement effect
         past_neigh = self.get_neighbor_effort(past_c, use_torch)
@@ -257,7 +285,7 @@ class Park:
         return behavior
 
 
-    def wildlife_response(self, past_w, past_a, past_c, use_torch=False):
+    def resource_response(self, past_w, past_a, past_c, use_torch=False):
         ''' wildlife response function
         psi:     wildlife growth ratio
         past_w:  past wildlife count
@@ -284,34 +312,6 @@ class Park:
 
         return curr_w
 
-    def tree_response(self, past_w, past_a, past_c, use_torch=False):
-        ''' tree response function
-        psi:     tree growth ratio
-        past_w:  past tree count
-        alpha:   responsiveness to past poaching
-        past_a:  past poacher action
-        '''
-        assert self.psi >= 1, f'psi is {self.psi}'
-
-        self.validate_past_a(past_a)
-        self.validate_past_c(past_c)
-
-        # if rangers used full patrol, they stop all attacks
-        effort_multiplier = 1. - past_c
-
-        if use_torch:
-            curr_w = torch.FloatTensor(past_w**self.psi) - (self.alpha * past_a * effort_multiplier)
-            curr_w = torch.clamp(curr_w, 0, None)
-        else:
-            if torch.is_tensor(past_a):
-                past_a = past_a.detach().numpy()
-            if torch.is_tensor(past_w):
-                past_w = past_w.detach().numpy()
-            curr_w = past_w**self.psi - (self.alpha * past_a * effort_multiplier)
-            np.clip(curr_w, 0, None, out=curr_w)
-
-        return curr_w
-    
     def validate_past_a(self, past_a):
         if torch.is_tensor(past_a):
             assert torch.all(past_a <= 1.), 'past_a has val > 1 {}'.format(past_a)

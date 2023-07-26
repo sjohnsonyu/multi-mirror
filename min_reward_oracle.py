@@ -30,7 +30,7 @@ def smooth(x, window_len=11, window='hanning'):
     return y
 
 
-def min_reward(park_params, def_strategy, attractiveness_learning_rate=5e-2,
+def min_reward(park_params, def_strategy, threat_mode, attractiveness_learning_rate=5e-2,
         n_iter=400, batch_size=64, visualize=False, init_attractiveness=None):
     """
     given a defender strategy, learn updated attractiveness parameters to minimize reward
@@ -65,6 +65,7 @@ def min_reward(park_params, def_strategy, attractiveness_learning_rate=5e-2,
                park_params['alpha'],
                park_params['beta'],
                park_params['eta'],
+               threat_mode,
                param_int=park_params['param_int'])
 
     state = env.reset()

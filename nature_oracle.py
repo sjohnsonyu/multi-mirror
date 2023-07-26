@@ -4,8 +4,8 @@ implement nature oracle of double oracle
 Lily Xu, 2020
 """
 
-import sys, os
-import pickle
+# import sys, os
+# import pickle
 import itertools
 import random
 import numpy as np
@@ -23,6 +23,9 @@ def sample_strategy(distrib):
     strategy_i = random.choices(list(range(len(distrib))), weights=distrib)[0]
     return strategy_i
 
+# NOTE: this is currently written so you need 2 diff nature oracle objects
+# for poaching and logging but that's not really necessary; refactor
+# to share a single object
 
 class NatureOracle:
     def __init__(self,
@@ -31,17 +34,19 @@ class NatureOracle:
                  n_train,
                  use_wake,
                  freeze_policy_step,
-                 freeze_a_step):
+                 freeze_a_step,
+                 threat_mode='poaching'):
         """
         use_wake: whether to use wake/sleep option
         freeze_policy_step: how often to freeze policy
         freeze_a_step: how often to unfreeze attractiveness
         """
         self.park_params = park_params
-        self.n_train     = n_train
-        self.use_wake    = use_wake
+        self.n_train = n_train
+        self.use_wake = use_wake
         self.freeze_policy_step = freeze_policy_step
-        self.freeze_a_step      = freeze_a_step
+        self.freeze_a_step = freeze_a_step
+        self.threat_mode = threat_mode
 
     def best_response(self, agent_strategies, agent_distrib, display=True):
         """
@@ -50,7 +55,6 @@ class NatureOracle:
 
         returns: best response attractiveness
         """
-
         br = self.run_DDPG(agent_strategies, agent_distrib, display=display)
         br = br.detach().numpy()
 
@@ -63,7 +67,7 @@ class NatureOracle:
         freeze_policy_step: for wake/sleep procedure, how often to freeze policy
         freeze_a_step: for wake/sleep procedure, how often to *unfreeze* attractiveness """
 
-        # initialize with random attractiveness values in interval
+        # initialize with random attractiveness values in interval  # is this in interval?? doesn't seem like it..
         attractiveness = (np.random.rand(self.park_params['n_targets']) - .5) * 2
         attractiveness = attractiveness.astype(float)
         print('attractiveness (raw)', np.round(attractiveness, 3))
@@ -78,17 +82,17 @@ class NatureOracle:
 
         def get_agent_avg_reward(env, agent_strategy, n_iter=100):
             agent_total_rewards = torch.zeros(self.park_params['horizon'])
-            for i in range(n_iter):
+            for _ in range(n_iter):
                 state = env.reset()
                 for t in itertools.count():
-                     action = agent_strategy.select_action(state)
-                     action = torch.Tensor(action)
-                     next_state, reward, done, info = env.step(action, use_torch=True)
-                     agent_total_rewards[t] += reward
-                     state = next_state
+                    action = agent_strategy.select_action(state)
+                    action = torch.Tensor(action)
+                    next_state, reward, done, info = env.step(action, use_torch=True)
+                    agent_total_rewards[t] += reward
+                    state = next_state
 
-                     if done:
-                         break
+                    if done:
+                        break
 
             agent_avg_rewards = agent_total_rewards / n_iter
             if display:
@@ -97,6 +101,7 @@ class NatureOracle:
 
         total_step = 0
 
+        param_int = self.park_params['param_int'] if self.threat_mode == 'poaching' else self.park_params['param_int_logging']
         env = Park(attractiveness,
                    self.park_params['initial_effort'],
                    self.park_params['initial_wildlife'],
@@ -111,7 +116,8 @@ class NatureOracle:
                    self.park_params['alpha'],
                    self.park_params['beta'],
                    self.park_params['eta'],
-                   param_int=self.park_params['param_int'])
+                   self.threat_mode,
+                   param_int=param_int)
 
         # memoize agent average reward for each policy
         agent_avg_rewards = []
@@ -144,6 +150,7 @@ class NatureOracle:
                 updating_a = True
                 updating_policy = True
 
+            param_int = self.park_params['param_int'] if self.threat_mode == 'poaching' else self.park_params['param_int_logging']
             env = Park(attractiveness,
                        self.park_params['initial_effort'],
                        self.park_params['initial_wildlife'],
@@ -158,14 +165,16 @@ class NatureOracle:
                        self.park_params['alpha'],
                        self.park_params['beta'],
                        self.park_params['eta'],
-                       param_int=self.park_params['param_int'])
+                       self.threat_mode,
+                       param_int=param_int)
 
             state = env.reset()
             episode_reward = 0
 
-            a = convert_to_a(env.attractiveness.detach().numpy(), self.park_params['param_int'])
+            a = convert_to_a(env.attractiveness.detach().numpy(), param_int)
             if i_display:
-                print('episode {} attractiveness {} raw {}'.format(i_episode, np.round(a, 3), np.round(raw_a, 3)))
+                # print('episode {} attractiveness {} raw {}'.format(i_episode, np.round(a, 3), np.round(raw_a, 3)))
+                print('episode {} attractiveness {} raw {}'.format(i_episode, np.round(a, 3), np.round(a, 3)))
             state = torch.cat([state, attractiveness])
 
             # get reward of sampled agent strategy

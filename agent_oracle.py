@@ -4,13 +4,13 @@ implement agent oracle of double oracle
 Lily Xu, 2021
 """
 
-import sys, os
-import pickle
+# import sys, os
+# import pickle
 import itertools
-import random
+# import random
 import numpy as np
-import torch
-from collections.abc import Iterable
+# import torch
+# from collections.abc import Iterable
 
 from park import Park
 from ddpg import *
@@ -28,7 +28,7 @@ class AgentOracle:
         self.n_eval = n_eval
         self.budget = park_params['budget']
 
-    def simulate_reward(self, def_strategies, nature_strategies, def_distrib=None, nature_distrib=None, display=True):
+    def simulate_reward(self, def_strategies, nature_strategies, threat_mode, def_distrib=None, nature_distrib=None, display=True):
         """ this is similar to evaluate_DDPG() from defender_oracle_evaluation.py
         if def_distrib=None, def_strategies only a single strategy
         if nature_distrib=None, nature_strategies only a single strategy """
@@ -68,6 +68,7 @@ class AgentOracle:
                        park_params['alpha'],
                        park_params['beta'],
                        park_params['eta'],
+                       threat_mode,
                        param_int=park_params['param_int'])
 
             # initialize the environment and state
@@ -99,20 +100,74 @@ class AgentOracle:
         return avg_reward
 
 
-    def best_response(self, nature_strategies, nature_distrib, display=False):
+    def best_response(self, nature_strategies, nature_distrib, threat_mode, display=False):
+        # NOTE: nature_strategies referes to the poaching strategies when poaching is the objective,
+        # and logging strategies when logging is the objective
         assert len(nature_strategies) == len(nature_distrib), 'nature strategies {}, distrib {}'.format(len(nature_strategies), len(nature_distrib))
         br, checkpoint_rewards = run_DDPG(self.park_params,
                                           nature_strategies,
                                           nature_distrib,
                                           self.checkpoints,
                                           self.n_train,
+                                          threat_mode,
                                           display=display)
 
         return br
 
+    def simulate_policy(self, def_strategy, attractiveness, threat_mode, display=True):
+        param_int = self.park_params['param_int'] if threat_mode == 'poaching' else self.park_params['param_int_logging']
+        park_params = self.park_params
+        env = Park(attractiveness,
+                    park_params['initial_effort'],
+                    park_params['initial_wildlife'],
+                    park_params['initial_trees'],
+                    park_params['initial_attack'],
+                    park_params['height'],
+                    park_params['width'],
+                    park_params['n_targets'],
+                    park_params['budget'],
+                    park_params['horizon'],
+                    park_params['psi'],
+                    park_params['alpha'],
+                    park_params['beta'],
+                    park_params['eta'],
+                    threat_mode,
+                    param_int=param_int)
+
+        policy = []
+        rewards = []
+        states = []
+        # initialize the environment and state
+        state = env.reset()
+
+        for t in itertools.count():
+            # select and perform an action
+            action = def_strategy.select_action(state)
+
+            # if DDPG (which returns softmax): take action up to budget and then clip each location to be between 0 and 1
+            if isinstance(def_strategy, DDPG):
+                before_sum = action.sum()
+                action = (action / action.sum()) * self.budget
+                action[np.where(action > 1)] = 1
+                
+            next_state, reward, done, _ = env.step(action, use_torch=False)
+            
+            policy.append(action)
+            states.append(next_state)
+            rewards.append(reward)
+
+            # move to the next state
+            state = next_state
+
+            # evaluate performance if terminal
+            if done:
+                break
+        
+        return np.array(policy), np.array(rewards), np.array(states)
+        
 
 
-def run_DDPG(park_params, nature_strategies, nature_distrib, checkpoints, n_train, display=True):
+def run_DDPG(park_params, nature_strategies, nature_distrib, checkpoints, n_train, threat_mode, display=True):
     state_dim  = 2*park_params['n_targets'] + 1
     action_dim = park_params['n_targets']
 
@@ -144,7 +199,8 @@ def run_DDPG(park_params, nature_strategies, nature_distrib, checkpoints, n_trai
                     park_params['psi'],
                     park_params['alpha'],
                     park_params['beta'],
-                    park_params['eta'])
+                    park_params['eta'],
+                    threat_mode)
 
         # initialize the environment and state
         state = park.reset()
@@ -174,3 +230,5 @@ def run_DDPG(park_params, nature_strategies, nature_distrib, checkpoints, n_trai
             print('episode {:4d}   reward: {:.2f}   average reward: {:.2f}'.format(i_episode, np.round(episode_reward, 2), np.mean(rewards[-10:])))
 
     return ddpg, checkpoint_rewards
+
+

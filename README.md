@@ -68,3 +68,15 @@ The options used to configure the MIRROR algorithm (including the RL oracles) ar
 - scikit-learn 0.23.2
 - scipy 1.5.3
 - nashpy 0.0.19
+
+
+
+FIRST INSTALL THE CORRECT VERSION OF PYTHON!!
+conda install python==3.6
+pip3 install torch==1.0.1
+pip3 install matplotlib==3.2.2
+pip3 install numpy==1.15.3
+pip3 install pandas==1.0.5
+pip3 install scikit-learn==0.23.2
+pip3 install scipy==1.5.3
+pip3 install nashpy==0.0.19

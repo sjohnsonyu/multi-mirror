@@ -4,13 +4,12 @@ double oracle implementation - putting it all together
 Lily Xu, 2021
 """
 
-import sys, os
+import os
 import pickle
 import time
 from datetime import datetime
 import argparse
 import numpy as np
-import pandas as pd
 from scipy import signal # for 2D gaussian kernel
 import torch
 
@@ -77,8 +76,6 @@ class DoubleOracle:
         hunting_int = np.random.uniform(0, max_interval, size=self.n_targets)
         # self.hunting_param_int = [(hunting_attract_vals[i]-hunting_int[i], hunting_attract_vals[i]+hunting_int[i]) for i in range(self.n_targets)]
         self.hunting_param_int = [(hunting_attract_vals[i], hunting_attract_vals[i]+hunting_int[i]) for i in range(self.n_targets)]
-        # print('hunting_param_int', [tuple(np.round(hunting_int, 2)) for hunting_int in self.hunting_param_int])
-
         self.hunting_param_int = np.array(self.hunting_param_int)
         assert np.all(self.hunting_param_int[:, 1] >= self.hunting_param_int[:, 0])
 
@@ -86,8 +83,6 @@ class DoubleOracle:
         logging_int = np.random.uniform(0, max_interval, size=self.n_targets)
         # self.logging_param_int = [(logging_attract_vals[i]-logging_int[i], logging_attract_vals[i]+logging_int[i]) for i in range(self.n_targets)]
         self.logging_param_int = [(logging_attract_vals[i], logging_attract_vals[i]+logging_int[i]) for i in range(self.n_targets)]
-        # print('logging_param_int', [tuple(np.round(logging_int, 2)) for logging_int in self.logging_param_int])
-
         self.logging_param_int = np.array(self.logging_param_int)
         assert np.all(self.logging_param_int[:, 1] >= self.logging_param_int[:, 0])
 
@@ -155,16 +150,13 @@ class DoubleOracle:
                                           freeze_policy_step,
                                           freeze_a_step,
                                           threat_mode=self.objective)
-        # TODO: do we made a second NatureOracle but just for the trees?
-        self.nature_oracle_secondary = NatureOracle(self.park_params,  # TODO would need to specify to use logging params
+        self.nature_oracle_secondary = NatureOracle(self.park_params,
                                                   checkpoints,
                                                   nature_n_train,
                                                   use_wake,
                                                   freeze_policy_step,
                                                   freeze_a_step,
                                                   threat_mode=self.secondary)
-
-
         # initialize attractiveness
         init_attractiveness_poaching = (np.random.rand(self.n_targets) - .5) * 2
         init_attractiveness_logging = (np.random.rand(self.n_targets) - .5) * 2
@@ -175,7 +167,6 @@ class DoubleOracle:
         self.nature_strategies_logging = [init_attractiveness_logging]  # attractiveness
         self.payoffs_poaching = [] # agent regret for each (agent strategy, attractiveness) combo
         self.payoffs_logging = [] # agent regret for each (agent strategy, attractiveness) combo
-
 
     def run(self):
         agent_eq  = np.array([1.]) # account for baselines
@@ -300,7 +291,6 @@ class DoubleOracle:
         return len(self.nature_strategies_poaching) - 1
     
     def print_agent_strategy(self, agent_eq, nature_eq, threat_mode):
-        # breakpoint()
         print()
         print(f'Printing policies for threat mode {threat_mode}')
         nonzero_agent_strategies = [self.agent_strategies[i] for i in range(len(agent_eq)) if agent_eq[i] != 0]
@@ -317,9 +307,6 @@ class DoubleOracle:
                 print('states')
                 print(states)
                 print()
-
-
-
 
 
 if __name__ == '__main__':
@@ -397,7 +384,6 @@ if __name__ == '__main__':
     print('hunting_attract_vals', np.round(hunting_attract_vals, 2))
     print('logging_attract_vals', np.round(logging_attract_vals, 2))
 
-    # TODO make this a flag...
     write_initialization = args.write == 1
     read_initialization = not write_initialization
     assert write_initialization != read_initialization, "Think read/write through carefully"
@@ -410,15 +396,15 @@ if __name__ == '__main__':
     if balance_attract:
         logging_attract_vals = hunting_attract_vals.copy()
         np.random.shuffle(logging_attract_vals)
-
-    exp_path = f'initialization_vals/seed_{seed}_height_{height}_width_{width}_max_interval_{max_interval}{balance_attract_str}'
+    exp_name = f'seed_{seed}_height_{height}_width_{width}_max_interval_{max_interval}{balance_attract_str}'
+    initialization_path = f'initialization_vals/' + exp_name
 
     if is_toy:
         print('NOTE: OVERRIDING EXP PATH FOR TOY DATA!')
-        exp_path = f'initialization_vals/toy'
+        initialization_path = f'initialization_vals/toy'
 
-    hunting_attract_vals = read_write_initialization_vals(hunting_attract_vals, '_hunting_attract_vals.txt', exp_path, write_initialization, read_initialization)
-    logging_attract_vals = read_write_initialization_vals(logging_attract_vals, '_logging_attract_vals.txt', exp_path, write_initialization, read_initialization)
+    hunting_attract_vals = read_write_initialization_vals(hunting_attract_vals, '_hunting_attract_vals.txt', initialization_path, write_initialization, read_initialization)
+    logging_attract_vals = read_write_initialization_vals(logging_attract_vals, '_logging_attract_vals.txt', initialization_path, write_initialization, read_initialization)
     
     psi = 1.1 # wildlife growth ratio
     alpha = .5  # strength that poachers eliminate wildlife
@@ -436,7 +422,7 @@ if __name__ == '__main__':
     print('beta {:.3f}, eta {:.3f}'.format(beta, eta))
 
     checkpoints = [1, 50, 100, 500, 1000, 3000, 5000, 10000, 20000, 30000, 40000, 50000, 80000, 100000, 120000, 150000, 170000]#, N_TRAIN-1]
-    # breakpoint()
+
     do = DoubleOracle(max_epochs,
                       height,
                       width,
@@ -458,7 +444,7 @@ if __name__ == '__main__':
                       checkpoints,
                       freeze_policy_step,
                       freeze_a_step,
-                      exp_path,
+                      initialization_path,
                       write_initialization,
                       read_initialization,
                       objective
@@ -473,13 +459,8 @@ if __name__ == '__main__':
     start_time = time.time()
     assert n_perturb == 0, "Need to modify if scaling up the perturbations"
     for i in range(n_perturb+1):
-        # if read_initialization:
-        #     baseline_middle = read_write_initialization_pickle(None, f'_baseline_middle_{i}.pickle', exp_path, write_initialization, read_initialization)
-        # else:
         param_int = do.hunting_param_int if objective == 'poaching' else do.logging_param_int
         baseline_middle = use_middle(param_int, do.agent_oracle, objective)
-        # if write_initialization:
-        #     read_write_initialization_pickle(baseline_middle, f'_baseline_middle_{i}.pickle', exp_path, write_initialization, read_initialization)
         do.update_payoffs_agent(baseline_middle)
     middle_time = (time.time() - start_time) / (n_perturb+1)
     print('baseline middle runtime {:.1f} seconds'.format(middle_time))
@@ -496,7 +477,6 @@ if __name__ == '__main__':
     print('baseline random runtime {:.1f} seconds'.format(random_time))
     
     # baseline: maximin robust (robust adversarial RL - RARL)
-    # print('Skipping maximin baseline since it take 20 minutes')
     print('########## BASELINE MAXIMIN ##########')
     baseline_maximin_i = len(do.agent_strategies)
     start_time = time.time()
@@ -507,7 +487,6 @@ if __name__ == '__main__':
     print('baseline maximin runtime {:.1f} seconds'.format(maximin_time))
 
     # baseline: RARL with regret
-    # print('Skipping RARL baseline since it take 77 minutes')
     print('########## BASELINE RARL WITH REGRET ##########')
     baseline_RARL_regret_i = len(do.agent_strategies)
     start_time = time.time()
@@ -526,7 +505,6 @@ if __name__ == '__main__':
     print('DO runtime {:.1f} seconds'.format(do_time))
 
     print('\n\n\n\n\n-----------------------')
-    # print('equilibrium value is ', val_upper, val_lower)
     print('agent BR mixed strategy           ', np.round(agent_eq, 4))
     print('Nature attractiveness mixed strategy ', np.round(nature_eq, 4))
     print('Nature attractiveness are')
@@ -610,25 +588,8 @@ if __name__ == '__main__':
     baseline_RARL_regret_regret_logging = np.min(baseline_RARL_regret_regrets_logging)
     print('avg regret of baseline RARL_regret {:.3f}'.format(baseline_RARL_regret_regret_poaching))
     print('avg regret of baseline RARL_regret {:.3f}'.format(baseline_RARL_regret_regret_logging))
- 
-    # # My impression is that this is what we want to do for the primary objective
-    # # But this might be wrong...
-    # if do.objective == 'poaching':
-    #     do_regret_poaching = -get_payoff(regret_poaching, agent_eq, nature_eq)
-    #     print('avg regret of DO poaching {:.3f}'.format(do_regret_poaching))
 
-    #     nature_eq_logging = get_nature_best_strategy(regret_logging, agent_eq)
-    #     do_regret_logging = -get_payoff(regret_logging, agent_eq, nature_eq_logging)
-    #     print('avg regret of DO logging {:.3f}'.format(do_regret_logging))
-    # else:
-    #     do_regret_logging = -get_payoff(regret_logging, agent_eq, nature_eq)
-    #     print('avg regret of DO logging {:.3f}'.format(do_regret_logging))
-
-    #     nature_eq_poaching = get_nature_best_strategy(regret_poaching, agent_eq)
-    #     do_regret_poaching = -get_payoff(regret_poaching, agent_eq, nature_eq_poaching)
-    #     print('avg regret of DO poaching {:.3f}'.format(do_regret_poaching))
-
-    #########
+    print('----------- DOUBLE ORACLE -----------')
     if do.objective == 'poaching':
         do_regret_poaching = -get_payoff(regret_poaching, agent_eq, nature_eq)
         print('avg regret of DO poaching {:.3f}'.format(do_regret_poaching))
@@ -638,7 +599,6 @@ if __name__ == '__main__':
 
     nature_br_secondary = do.nature_oracle_secondary.best_response(do.agent_strategies, agent_eq, display=False)
     do.update_payoffs_nature(nature_br_secondary, payoff_mode=do.secondary)
-    # TODO: do I know for sure that this is working?
 
     if do.objective == 'poaching':  # calculate for secondary
         regret_logging = np.array(do.payoffs_logging) - np.array(do.payoffs_logging).max(axis=0)  # recalc because 
@@ -652,27 +612,11 @@ if __name__ == '__main__':
         do_regret_poaching = -get_payoff(regret_poaching, agent_eq, secondary_eq)
 
 
-    # maybe do this
-    # mixed_strategy = get_nature_best_strategy(payoffs, agent_eq)
-    # -get_payoff(regret_logging, agent_eq, nature_eq_logging)
-
-    # milind seems to want me to do this:
-    # nature_br = self.nature_oracle.best_response(self.agent_strategies, agent_eq, display=False)
-    # calculate agent payoffs
-    # then calculate the expected regret I think
-
-    # FIXME this is not quite the right nature_eq because it's assuming a different agent_eq
-    # _, nature_eq_logging = do.find_equilibrium(payoff_mode='logging')
-    # do_regret_logging = -get_payoff(regret_logging, agent_eq, nature_eq_logging)  # FIXME need diff nature_eq
-    # print('avg regret of DO logging {:.3f}'.format(do_regret_logging))
-
-
     print('max_epochs {}, n_train agent {}, nature {}'.format(max_epochs, agent_n_train, nature_n_train))
     print('n_targets {}, horizon {}, budget {}'.format(do.n_targets, horizon, budget))
 
     bar_vals_poaching = [do_regret_poaching, baseline_middle_regret_poaching, baseline_random_regret_poaching, baseline_maximin_regret_poaching, baseline_RARL_regret_regret_poaching]
     bar_vals_logging = [do_regret_logging, baseline_middle_regret_logging, baseline_random_regret_logging, baseline_maximin_regret_logging, baseline_RARL_regret_regret_logging]
-    # bar_vals_poaching = [do_regret_poaching, baseline_middle_regret_poaching, baseline_random_regret_poaching]#, baseline_maximin_regret_poaching, baseline_RARL_regret_regret]
     tick_names = ('double oracle', 'baseline middle', 'baseline random', 'baseline maximin', 'baseline RARL regret')
 
     print('regrets', tick_names)
@@ -709,45 +653,34 @@ if __name__ == '__main__':
             "max_interval, wildlife, deterrence, use_wake,"
             "freeze_policy_step, freeze_a_step, middle_time, maximin_time, do_time, objective, balance_attract"
             "time, is_toy\n"))
-        f.write((f"{seed}, {do.n_targets}, {budget}, {horizon}, {do_regret_poaching:.5f}, {do_regret_logging:.5f},"
-        f"{baseline_middle_regret_poaching:.5f}, {baseline_middle_regret_logging:.5f}, {baseline_random_regret_poaching:.5f}, {baseline_random_regret_logging:.5f}, {baseline_maximin_regret_poaching:.5f}, {baseline_maximin_regret_logging:.5f}, {baseline_RARL_regret_regret_poaching:.5f}, {baseline_RARL_regret_regret_logging:.5f},"
-        f"{n_eval}, {agent_n_train}, {nature_n_train}, {max_epochs}, {n_perturb},"
-        f"{max_interval}, {wildlife_setting}, {deterrence_setting}, {use_wake},"
-        f"{freeze_policy_step}, {freeze_a_step}, {middle_time}, {maximin_time}, {do_time}, {do.objective}, {balance_attract},"
+        f.write((f"{seed}, {do.n_targets}, {budget}, {horizon}, {do_regret_poaching:.5f}, {do_regret_logging:.5f}, "
+        f"{baseline_middle_regret_poaching:.5f}, {baseline_middle_regret_logging:.5f}, {baseline_random_regret_poaching:.5f}, {baseline_random_regret_logging:.5f}, {baseline_maximin_regret_poaching:.5f}, {baseline_maximin_regret_logging:.5f}, {baseline_RARL_regret_regret_poaching:.5f}, {baseline_RARL_regret_regret_logging:.5f}, "
+        f"{n_eval}, {agent_n_train}, {nature_n_train}, {max_epochs}, {n_perturb}, "
+        f"{max_interval}, {wildlife_setting}, {deterrence_setting}, {use_wake}, "
+        f"{freeze_policy_step}, {freeze_a_step}, {middle_time}, {maximin_time}, {do_time}, {do.objective}, {balance_attract}, "
         f"{str_time}, {is_toy}") +
         '\n')
-
 
     do.print_agent_strategy(agent_eq, nature_eq, objective)
     do.print_agent_strategy(agent_eq, secondary_eq, secondary)
 
-
     x = np.arange(len(bar_vals_poaching))
-    # plt.figure()
-    # plt.bar(x, bar_vals_poaching)
-    # plt.xticks(x, tick_names, rotation='vertical')
-    # plt.xlabel('method')
-    # plt.ylabel('avg regret')
-    # plt.title('n_targets {}, budget {}, horizon {}, max_epochs {}'.format(do.n_targets, budget, horizon, max_epochs))
-    # plt.savefig('plots/regret_n{}_b{}_h{}_epoch{}_{}.png'.format(do.n_targets, budget, horizon, max_epochs, str_time))
     plt.figure()
     for i in range(len(bar_vals_poaching)):
         plt.scatter(bar_vals_poaching[i], bar_vals_logging[i], label=tick_names[i])
-    # plt.xticks(x, tick_names, rotation='vertical')
-    # plt.yticks(y, tick_names)
     plt.legend()
     plt.xlabel('avg poaching regret')
     plt.ylabel('avg logging regret')
     plt.title('n_targets {}, budget {}, horizon {}, max_epochs {}'.format(do.n_targets, budget, horizon, max_epochs))
     plt.savefig('plots/regret_{}_n{}_b{}_h{}_epoch{}_{}.png'.format(do.objective, do.n_targets, budget, horizon, max_epochs, str_time))
-    # plt.show()
 
-    with open(exp_path + f'_strategies_{str_time}', 'wb') as f:
+    results_path = 'results/' + exp_name
+    with open(results_path + f'_strategies_{str_time}', 'wb') as f:
         pickle.dump([do.agent_strategies[:1] + do.agent_strategies[2:], do.nature_strategies_poaching, do.nature_strategies_logging], f)
 
-    with open(exp_path + f'_payoffs_{str_time}', 'wb') as f:
+    with open(results_path + f'_payoffs_{str_time}', 'wb') as f:
         pickle.dump([regret_poaching, regret_logging], f)
 
-    with open(exp_path + f'_eqs_{str_time}', 'wb') as f:
+    with open(results_path + f'_eqs_{str_time}', 'wb') as f:
         pickle.dump([agent_eq, nature_eq], f)
 

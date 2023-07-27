@@ -21,7 +21,8 @@ from agent_oracle import AgentOracle
 from nature_oracle import NatureOracle
 from nfg_solver import solve_game, solve_minimax_regret, get_payoff, get_nature_best_strategy
 
-from min_reward_oracle import min_reward
+from baseline import use_middle, maximin, RARL_regret, RandomPolicy
+from util import read_write_initialization_vals, read_write_initialization_pickle
 
 if not os.path.exists('plots'):
     os.makedirs('plots')
@@ -201,25 +202,12 @@ class DoubleOracle:
 
             self.update_payoffs(nature_br, agent_br, payoff_mode=self.objective)
             self.update_payoffs_nature(nature_br_secondary, payoff_mode=self.secondary)
-            
-            # perturb
-            print('Skipping perturbations for simplicity!')
-            # for _ in range(self.n_perturb):
-            #     perturb = np.random.normal(scale=0.5, size=nature_br.shape)
-            #     perturbed_br = nature_br + perturb
-            #     print('  perturbed', np.round(perturbed_br, 3))
-
-            #     agent_perturbed_br = self.agent_oracle.best_response([perturbed_br], [1], display=False)
-
-            #     self.update_payoffs(perturbed_br, agent_perturbed_br)
-
+    
             # find equilibrium of subgame
             agent_eq, nature_eq = self.find_equilibrium(payoff_mode=self.objective)
 
             print('agent equilibrium  ', np.round(agent_eq, 3))
             print('nature equilibrium ', np.round(nature_eq, 3))
-
-            # max_regret_game = np.array(self.payoffs_poaching) - np.array(self.payoffs_poaching).max(axis=0)
 
             if n_epochs >= self.max_epochs: # terminate after a max number of epochs
                 converged = True
@@ -331,116 +319,8 @@ class DoubleOracle:
                 print()
 
 
-###################################################
-# baselines
-###################################################
 
-def use_middle(param_int, agent_oracle, threat_mode):
-    """ solve optimal reward relative to midpoint of uncertainty interval
-    sequential policy, but based on the center of the uncertainty set """
 
-    attractiveness = param_int.mean(axis=1)
-    agent_br = agent_oracle.best_response([attractiveness], [1.], threat_mode, display=True)
-    return agent_br
-
-def maximin(park_params, agent_oracle, threat_mode):
-    """ maximize min reward, analogous to robust adversarial RL (RARL) """
-    # n_iters = 10
-    n_iters = 5
-    min_reward_iters = 300
-    # pick initial attractiveness at random
-    attractiveness = (np.random.rand(park_params['n_targets']) - .5) * 2
-    attractiveness = attractiveness.astype(float)
-    # batch_size = 64
-    batch_size = 4
-
-    for iter in range(n_iters):
-        agent_strategy = agent_oracle.best_response([attractiveness], [1.], threat_mode, display=False)
-        if iter == n_iters - 1: break
-        attractiveness = min_reward(park_params,
-                                    agent_strategy,
-                                    threat_mode,
-                                    attractiveness_learning_rate=5e-2,
-                                    n_iter=min_reward_iters,
-                                    batch_size=batch_size,
-                                    visualize=False,
-                                    init_attractiveness=attractiveness)
-
-    return agent_strategy
-
-def RARL_regret(park_params, agent_oracle, nature_oracle, threat_mode):
-    """ use a weakened form of MIRROR that is equivalent to RARL with regret,
-    using the nature oracle to compute regret instead of maximin reward """
-    # n_iters = 10
-    n_iters = 5
-    print("NOTE! DOING RARL REGRET WITH 5 ITER FOR NOW")
-    # n_iters = 1
-    # pick initial attractiveness at random
-    attractiveness = (np.random.rand(park_params['n_targets']) - .5) * 2
-    attractiveness = attractiveness.astype(float)
-
-    for iter in range(n_iters):
-        agent_strategy = agent_oracle.best_response([attractiveness], [1.], threat_mode, display=False)
-        if iter == n_iters - 1: break
-        attractiveness = nature_oracle.best_response([agent_strategy], [1.], display=False)
-
-    return agent_strategy
-
-# def myopic(param_int, agent_oracle):
-#     """ regular myopic - can use whatever method to come up with policies. will need to evaluate based on minimax regret
-
-#     myopic minimax? look at only our reward in the next timestep - would need
-#     to use bender's decomposition to compute. and we also have continuous policies
-#     """
-#     pass
-
-class RandomPolicy:
-    def __init__(self, park_params):
-        self.n_targets = park_params['n_targets']
-        self.budget    = park_params['budget']
-
-    def select_action(self, state):
-        max_effort = 1 # max effort at any target
-
-        action = np.random.rand(self.n_targets)
-        action /= action.sum()
-        action *= self.budget
-
-        # ensure we never exceed effort = 1 on any target
-        while len(np.where(action > max_effort)[0]) > 0:
-            excess_idx = np.where(action > 1)[0][0]
-            excess = action[excess_idx] - max_effort
-
-            action[excess_idx] = max_effort
-
-            # add "excess" amount of effort randomly on other targets
-            add = np.random.uniform(size=self.n_targets - 1)
-            add = (add / np.sum(add)) * excess
-
-            action[:excess_idx] += add[:excess_idx]
-            action[excess_idx+1:] += add[excess_idx:]
-
-        return action
-
-def read_write_initialization_vals(arr, name, exp_path, write_initialization, read_initialization):
-    full_path = exp_path + name
-    if write_initialization:
-        np.savetxt(full_path, arr)
-    if read_initialization:
-        arr = np.loadtxt(full_path)
-    return arr
-
-def read_write_initialization_pickle(obj, name, exp_path, write_initialization, read_initialization):
-    import pickle
-    full_path = exp_path + name
-    if write_initialization:
-        with open(full_path, 'wb') as f:
-            pickle.dump(obj, f)
-
-    if read_initialization:
-        with open(full_path, 'rb') as f:
-            obj = pickle.load(f)
-        return obj
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='MIRROR robust reinforcement learning under minimax regret')
@@ -470,6 +350,7 @@ if __name__ == '__main__':
     parser.add_argument('--objective', type=str, default='poaching', help='whether to train on poaching or logging')
     parser.add_argument('--balance_attract', type=int, default=1, help='whether to use shuffled hunting attract vals for logging')
     parser.add_argument('--toy', type=int, default=0, help='whether to use toy data')
+    parser.add_argument('--write', type=int, default=0, help='whether to write the initialization data')
 
     args = parser.parse_args()
 
@@ -516,8 +397,9 @@ if __name__ == '__main__':
     print('hunting_attract_vals', np.round(hunting_attract_vals, 2))
     print('logging_attract_vals', np.round(logging_attract_vals, 2))
 
-    write_initialization = False
-    read_initialization = True
+    # TODO make this a flag...
+    write_initialization = args.write == 1
+    read_initialization = not write_initialization
     assert write_initialization != read_initialization, "Think read/write through carefully"
     if write_initialization:
         print("WRITE MODE")
@@ -594,7 +476,8 @@ if __name__ == '__main__':
         # if read_initialization:
         #     baseline_middle = read_write_initialization_pickle(None, f'_baseline_middle_{i}.pickle', exp_path, write_initialization, read_initialization)
         # else:
-        baseline_middle = use_middle(do.hunting_param_int, do.agent_oracle, objective)
+        param_int = do.hunting_param_int if objective == 'poaching' else do.logging_param_int
+        baseline_middle = use_middle(param_int, do.agent_oracle, objective)
         # if write_initialization:
         #     read_write_initialization_pickle(baseline_middle, f'_baseline_middle_{i}.pickle', exp_path, write_initialization, read_initialization)
         do.update_payoffs_agent(baseline_middle)

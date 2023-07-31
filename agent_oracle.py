@@ -101,7 +101,7 @@ class AgentOracle:
 
 
     def best_response(self, nature_strategies, nature_distrib, threat_mode, display=False):
-        # NOTE: nature_strategies referes to the poaching strategies when poaching is the objective,
+        # NOTE: nature_strategies refers to the poaching strategies when poaching is the objective,
         # and logging strategies when logging is the objective
         assert len(nature_strategies) == len(nature_distrib), 'nature strategies {}, distrib {}'.format(len(nature_strategies), len(nature_distrib))
         br, checkpoint_rewards = run_DDPG(self.park_params,

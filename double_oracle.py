@@ -26,6 +26,7 @@ from util import read_write_initialization_vals, read_write_initialization_pickl
 if not os.path.exists('plots'):
     os.makedirs('plots')
 
+
 def breakpoint():
     import pdb; pdb.set_trace()
 
@@ -41,8 +42,6 @@ class DoubleOracle:
                  n_eval,
                  agent_n_train,
                  nature_n_train,
-                 hunting_attract_vals,
-                 logging_attract_vals,
                  psi,
                  alpha,
                  beta,
@@ -53,10 +52,13 @@ class DoubleOracle:
                  checkpoints,
                  freeze_policy_step,
                  freeze_a_step,
-                 exp_path,
+                 initialization_path,
                  write_initialization,
                  read_initialization,
-                 objective
+                 objective,
+                 hunting_attract_vals=None,
+                 logging_attract_vals=None,
+                 verbose=True
                  ):
         self.max_epochs  = max_epochs
 
@@ -71,25 +73,31 @@ class DoubleOracle:
         self.n_perturb = n_perturb
         self.objective = objective
         self.secondary = 'logging' if objective == 'poaching' else 'poaching'
+        self.verbose = verbose
 
-        # attractiveness parameter interval
-        hunting_int = np.random.uniform(0, max_interval, size=self.n_targets)
-        # self.hunting_param_int = [(hunting_attract_vals[i]-hunting_int[i], hunting_attract_vals[i]+hunting_int[i]) for i in range(self.n_targets)]
-        self.hunting_param_int = [(hunting_attract_vals[i], hunting_attract_vals[i]+hunting_int[i]) for i in range(self.n_targets)]
-        self.hunting_param_int = np.array(self.hunting_param_int)
-        assert np.all(self.hunting_param_int[:, 1] >= self.hunting_param_int[:, 0])
+        self.hunting_param_int = None
+        self.logging_param_int = None
+        if not read_initialization:
+            # attractiveness parameter interval
+            hunting_int = np.random.uniform(0, max_interval, size=self.n_targets)
+            # self.hunting_param_int = [(hunting_attract_vals[i]-hunting_int[i], hunting_attract_vals[i]+hunting_int[i]) for i in range(self.n_targets)]
+            self.hunting_param_int = [(hunting_attract_vals[i], hunting_attract_vals[i]+hunting_int[i]) for i in range(self.n_targets)]
+            self.hunting_param_int = np.array(self.hunting_param_int)
+            assert np.all(self.hunting_param_int[:, 1] >= self.hunting_param_int[:, 0])
 
-        # TODO P3: add some way to specify how correlated the hunting and logging are
-        logging_int = np.random.uniform(0, max_interval, size=self.n_targets)
-        # self.logging_param_int = [(logging_attract_vals[i]-logging_int[i], logging_attract_vals[i]+logging_int[i]) for i in range(self.n_targets)]
-        self.logging_param_int = [(logging_attract_vals[i], logging_attract_vals[i]+logging_int[i]) for i in range(self.n_targets)]
-        self.logging_param_int = np.array(self.logging_param_int)
-        assert np.all(self.logging_param_int[:, 1] >= self.logging_param_int[:, 0])
+            # TODO P3: add some way to specify how correlated the hunting and logging are
+            logging_int = np.random.uniform(0, max_interval, size=self.n_targets)
+            # self.logging_param_int = [(logging_attract_vals[i]-logging_int[i], logging_attract_vals[i]+logging_int[i]) for i in range(self.n_targets)]
+            self.logging_param_int = [(logging_attract_vals[i], logging_attract_vals[i]+logging_int[i]) for i in range(self.n_targets)]
+            self.logging_param_int = np.array(self.logging_param_int)
+            assert np.all(self.logging_param_int[:, 1] >= self.logging_param_int[:, 0])
 
-        self.hunting_param_int = read_write_initialization_vals(self.hunting_param_int, '_hunting_param_int.txt', exp_path, write_initialization, read_initialization)
-        self.logging_param_int = read_write_initialization_vals(self.logging_param_int, '_logging_param_int.txt', exp_path, write_initialization, read_initialization)
-        print('hunting_param_int', np.round(self.hunting_param_int, 2))
-        print('logging_param_int', np.round(self.logging_param_int, 2))
+        self.hunting_param_int = read_write_initialization_vals(self.hunting_param_int, '_hunting_param_int.txt', initialization_path, write_initialization, read_initialization)
+        self.logging_param_int = read_write_initialization_vals(self.logging_param_int, '_logging_param_int.txt', initialization_path, write_initialization, read_initialization)
+        
+        if self.verbose:
+            print('hunting_param_int', np.round(self.hunting_param_int, 2))
+            print('logging_param_int', np.round(self.logging_param_int, 2))
 
 
         def gkern(kernlen=21, std=3):
@@ -115,8 +123,8 @@ class DoubleOracle:
             raise Exception('wildlife setting {} not implemented'.format(wildlife_setting))
         
         assert wildlife_setting == 1, "If changing wildlife setting, need to change read/write initialization exp name!"
-        initial_wildlife = read_write_initialization_vals(initial_wildlife, '_initial_wildlife.txt', exp_path, write_initialization, read_initialization)
-        initial_trees = read_write_initialization_vals(initial_trees, '_initial_trees.txt', exp_path, write_initialization, read_initialization)
+        initial_wildlife = read_write_initialization_vals(initial_wildlife, '_initial_wildlife.txt', initialization_path, write_initialization, read_initialization)
+        initial_trees = read_write_initialization_vals(initial_trees, '_initial_trees.txt', initialization_path, write_initialization, read_initialization)
 
         # setup park parameters dict
         self.park_params = {
@@ -139,8 +147,9 @@ class DoubleOracle:
           'secondary': self.secondary
         }
 
-        print('initial wildlife {:.2f} {}'.format(np.sum(initial_wildlife), np.round(initial_wildlife, 2)))
-        print('initial trees {:.2f} {}'.format(np.sum(initial_trees), np.round(initial_trees, 2)))
+        if self.verbose:
+            print('initial wildlife {:.2f} {}'.format(np.sum(initial_wildlife), np.round(initial_wildlife, 2)))
+            print('initial trees {:.2f} {}'.format(np.sum(initial_trees), np.round(initial_trees, 2)))
 
         self.agent_oracle = AgentOracle(self.park_params, checkpoints, agent_n_train, n_eval)
         self.nature_oracle = NatureOracle(self.park_params,
@@ -213,7 +222,6 @@ class DoubleOracle:
             assert len(self.payoffs_logging[0]) == len(self.nature_strategies_logging), '{} payoffs[0], {} nature strategies'.format(len(self.payoffs_logging[0]), len(self.nature_strategies_logging))
 
         return agent_eq, nature_eq
-
 
     def compute_regret(self, agent_s, nature_s, max_reward, threat_mode):
         reward = self.agent_oracle.simulate_reward([agent_s], [nature_s], threat_mode, display=False)
@@ -432,8 +440,6 @@ if __name__ == '__main__':
                       n_eval,
                       agent_n_train,
                       nature_n_train,
-                      hunting_attract_vals,
-                      logging_attract_vals,
                       psi,
                       alpha,
                       beta,
@@ -447,7 +453,9 @@ if __name__ == '__main__':
                       initialization_path,
                       write_initialization,
                       read_initialization,
-                      objective
+                      objective,
+                      hunting_attract_vals=hunting_attract_vals,
+                      logging_attract_vals=logging_attract_vals,
                       )
 
     print('max_epochs {}, n_train agent {}, nature {}'.format(max_epochs, agent_n_train, nature_n_train))

@@ -166,7 +166,6 @@ class AgentOracle:
         return np.array(policy), np.array(rewards), np.array(states)
         
 
-
 def run_DDPG(park_params, nature_strategies, nature_distrib, checkpoints, n_train, threat_mode, display=True):
     state_dim  = 2*park_params['n_targets'] + 1
     action_dim = park_params['n_targets']

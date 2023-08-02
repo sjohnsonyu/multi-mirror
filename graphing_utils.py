@@ -30,15 +30,6 @@ def plot_scatter(poaching_row, logging_row, exp_timestrs):
                         poaching_row['baseline_RARL_regret_regret_logging'].values[0],
                         logging_row['baseline_RARL_regret_regret_logging'].values[0]
     ]
-    # tick_names = ('double oracle (P)',
-    #               'double oracle (L)',
-    #               'baseline middle (P)',
-    #               'baseline middle (L)',
-    #               'baseline random',
-    #               'baseline maximin (P)',
-    #               'baseline maximin (L)',
-    #               'baseline RARL regret (P)',
-    #               'baseline RARL regret (L)')
     tick_names = ('DO_P',
                   'DO_L',
                   'mid_P',
@@ -52,9 +43,7 @@ def plot_scatter(poaching_row, logging_row, exp_timestrs):
     fig = plt.figure()
     ax = fig.add_subplot(111)
     for i in range(len(bar_vals_poaching)):
-        # plt.scatter(bar_vals_poaching[i], bar_vals_logging[i], label=tick_names[i])
         plt.scatter(bar_vals_poaching[i], bar_vals_logging[i])
-    # plt.scatter(bar_vals_poaching, bar_vals_logging)
     
     for i, label in enumerate(tick_names):
         ax.annotate(label, (bar_vals_poaching[i] + 0.01, bar_vals_logging[i] + 0.01))
@@ -127,4 +116,3 @@ if __name__ == '__main__':
     poaching_row, logging_row = get_rows(exp_timestrs)
     validate_comparable(poaching_row, logging_row)
     plot_scatter(poaching_row, logging_row, exp_timestrs)
-

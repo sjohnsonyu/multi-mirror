@@ -21,12 +21,13 @@ N_DISPLAY = 100
 
 
 class AgentOracle:
-    def __init__(self, park_params, checkpoints, n_train, n_eval):
+    def __init__(self, park_params, checkpoints, n_train, n_eval, threat_mode):
         self.park_params = park_params
         self.checkpoints = checkpoints
         self.n_train = n_train
         self.n_eval = n_eval
         self.budget = park_params['budget']
+        self.threat_mode = threat_mode
 
     def simulate_reward(self, def_strategies, nature_strategies, threat_mode, def_distrib=None, nature_distrib=None, display=True):
         """ this is similar to evaluate_DDPG() from defender_oracle_evaluation.py
@@ -54,6 +55,7 @@ class AgentOracle:
                 def_strategy = def_strategies[def_strategy_i]
 
             park_params = self.park_params
+            param_int = self.park_params['param_int'] if self.threat_mode == 'poaching' else self.park_params['param_int_logging']
             env = Park(attractiveness,
                        park_params['initial_effort'],
                        park_params['initial_wildlife'],
@@ -69,7 +71,7 @@ class AgentOracle:
                        park_params['beta'],
                        park_params['eta'],
                        threat_mode,
-                       param_int=park_params['param_int'])
+                       param_int=param_int)
 
             # initialize the environment and state
             state = env.reset()

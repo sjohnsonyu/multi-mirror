@@ -151,7 +151,7 @@ class DoubleOracle:
             print('initial wildlife {:.2f} {}'.format(np.sum(initial_wildlife), np.round(initial_wildlife, 2)))
             print('initial trees {:.2f} {}'.format(np.sum(initial_trees), np.round(initial_trees, 2)))
 
-        self.agent_oracle = AgentOracle(self.park_params, checkpoints, agent_n_train, n_eval)
+        self.agent_oracle = AgentOracle(self.park_params, checkpoints, agent_n_train, n_eval, threat_mode=self.objective)
         self.nature_oracle = NatureOracle(self.park_params,
                                           checkpoints,
                                           nature_n_train,
@@ -606,6 +606,8 @@ if __name__ == '__main__':
         print('avg regret of DO logging {:.3f}'.format(do_regret_logging))
 
     nature_br_secondary = do.nature_oracle_secondary.best_response(do.agent_strategies, agent_eq, display=False)
+    # optimal_strategy_secondary = do.agent_oracle.best_response()
+
     do.update_payoffs_nature(nature_br_secondary, payoff_mode=do.secondary)
 
     if do.objective == 'poaching':  # calculate for secondary

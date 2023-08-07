@@ -98,7 +98,7 @@ def graph_pareto(poaching_timestr, logging_timestr, seed):
     plt.scatter(df['poaching_regret'], df['logging_regret'])
     
     for i, label in enumerate(df['eq_str']):
-        ax.annotate(label, (df['poaching_regret'][i] + 0.01, df['logging_regret'][i] + 0.01))
+        ax.annotate(label, (df['poaching_regret'][i] + 0.001, df['logging_regret'][i] + 0.001))
 
     plt.xlabel('avg poaching regret')
     plt.ylabel('avg logging regret')

@@ -8,7 +8,7 @@ import torch
 
 from double_oracle import DoubleOracle, get_payoff
 from graphing_utils import get_rows, validate_comparable, graph_pareto
-
+from tqdm import tqdm
 
 CHECKPOINTS = [1, 50, 100, 500, 1000, 3000, 5000, 10000, 20000, 30000, 40000, 50000, 80000, 100000, 120000, 150000, 170000]#, N_TRAIN-1]
 PSI = 1.1 # wildlife growth ratio
@@ -74,11 +74,17 @@ def get_poaching_logging_regrets(all_agent_strategies,
                                  horizon,
                                  nature_n_train,
                                  max_interval,
+                                 is_toy,
+                                 is_paws,
+                                 exp_name,
                                  seed=0
                                 ):
-    
-    exp_name = f'seed_{seed}_height_{size}_width_{size}_max_interval_{max_interval}_balance_attract'
+    # exp_name = f'seed_0_height_{size}_width_{size}_max_interval_{max_interval}_balance_attract'
     initialization_path = f'initialization_vals/' + exp_name
+    if is_toy:
+        initialization_path = 'initialization_vals/toy'
+    if is_paws:
+        initialization_path = 'initialization_vals/paws_mini'
     
     torch.manual_seed(seed)
     np.random.seed(seed)
@@ -109,22 +115,33 @@ def get_poaching_logging_regrets(all_agent_strategies,
                       verbose=False
                       )
     # TODO: what to use for agent_eq?
-    do.agent_strategies = all_agent_strategies
+    do.agent_strategies = all_agent_strategies.copy()
+
     nature_br_poaching = do.nature_oracle.best_response(all_agent_strategies, agent_eq, display=False)
-    nature_br_secondary = do.nature_oracle_secondary.best_response(do.agent_strategies, agent_eq, display=False)
+    nature_br_logging = do.nature_oracle_secondary.best_response(do.agent_strategies, agent_eq, display=False)
+    
+    agent_opt_strategy_poaching = do.agent_oracle.best_response([nature_br_poaching], [1], "poaching", display=False)
+    agent_opt_strategy_logging = do.agent_oracle_secondary.best_response([nature_br_logging], [1], "logging", display=False)
+
     do.nature_strategies_poaching = []
     do.nature_strategies_logging = []
     do.payoffs_poaching = [[] for _ in range(len(all_agent_strategies))]
     do.payoffs_logging = [[] for _ in range(len(all_agent_strategies))]
 
-    do.update_payoffs_nature(nature_br_poaching, payoff_mode='poaching')
-    do.update_payoffs_nature(nature_br_secondary, payoff_mode='logging')
+    do.update_payoffs(nature_br_poaching, agent_opt_strategy_poaching, payoff_mode='poaching')
+    do.update_payoffs(nature_br_logging, agent_opt_strategy_logging, payoff_mode='logging')
 
+    # print('agent_eq', agent_eq)
+    # do.print_agent_strategy(agent_eq, [1, 0], "poaching")
+    # return
+    # do.print_agent_strategy(agent_eq, [0, 1], "logging")
+    
     regret_poaching = np.array(do.payoffs_poaching) - np.array(do.payoffs_poaching).max(axis=0)
     regret_logging = np.array(do.payoffs_logging) - np.array(do.payoffs_logging).max(axis=0)
 
-    do_regret_poaching = -get_payoff(regret_poaching, agent_eq, [1.])
-    do_regret_logging = -get_payoff(regret_logging, agent_eq, [1.])
+    
+    do_regret_poaching = -get_payoff(regret_poaching, np.append(agent_eq, [0, 0]), [1.])
+    do_regret_logging = -get_payoff(regret_logging, np.append(agent_eq, [0, 0]), [1.])
 
     # now log these puppies!
     print('agent_eq', agent_eq)
@@ -179,16 +196,123 @@ def get_agent_eqs(agent_strategies):
                 quarters_split_eq[j] = 0.25
                 agent_eqs.append(quarters_split_eq)
 
-                quarters_two_eq = np.array([0.25, 0.25, 0.25, 0.25])
-                quarters_two_eq[i] = 0.75
-                quarters_two_eq[j] = 0
-                agent_eqs.append(quarters_two_eq)
+                print("skipping for speed!")
+                # quarters_two_eq = np.array([0.25, 0.25, 0.25, 0.25])
+                # quarters_two_eq[i] = 0.75
+                # quarters_two_eq[j] = 0
+                # agent_eqs.append(quarters_two_eq)
     return agent_eqs
 
-    
-def create_pareto_curve(agent_strategies, agent_eqs, nature_eq, regrets):
-    pass
 
+def get_poaching_logging_regrets_variance(all_agent_strategies,
+                                 agent_eq,
+                                 size,
+                                 budget,
+                                 horizon,
+                                 nature_n_train,
+                                 max_interval,
+                                 is_toy,
+                                 is_paws,
+                                 exp_name,
+                                 seed=0
+                                ):
+    # exp_name = f'seed_0_height_{size}_width_{size}_max_interval_{max_interval}_balance_attract'
+    initialization_path = f'initialization_vals/' + exp_name
+    if is_toy:
+        initialization_path = 'initialization_vals/toy'
+    if is_paws:
+        initialization_path = 'initialization_vals/paws_mini'
+
+    do = DoubleOracle(max_epochs=0,
+                      height=size,
+                      width=size,
+                      budget=budget,
+                      horizon=horizon,
+                      n_perturb=0,
+                      n_eval=100,
+                      agent_n_train=0,
+                      nature_n_train=nature_n_train,
+                      psi=PSI,
+                      alpha=ALPHA,
+                      beta=BETA,
+                      eta=ETA,
+                      max_interval=max_interval,
+                      wildlife_setting=1,
+                      use_wake=True,
+                      checkpoints=CHECKPOINTS,
+                      freeze_policy_step=5,
+                      freeze_a_step=5,
+                      initialization_path=initialization_path,
+                      write_initialization=False,
+                      read_initialization=True,
+                      objective="poaching",
+                      verbose=False
+                      )
+    # TODO: what to use for agent_eq?
+    do.agent_strategies = all_agent_strategies.copy()
+    poaching_regrets_no_max = []
+    logging_regrets_no_max = []
+    poaching_regrets = []
+    logging_regrets = []
+    for seed in range(20):
+        print(seed)
+        torch.manual_seed(seed)
+        np.random.seed(seed)
+        # this is the first variable
+        nature_br_poaching = do.nature_oracle.best_response(all_agent_strategies, agent_eq, display=False)
+        nature_br_logging = do.nature_oracle_secondary.best_response(do.agent_strategies, agent_eq, display=False)
+
+        agent_opt_strategy_poaching = do.agent_oracle.best_response([nature_br_poaching], [1], "poaching", display=False)
+        agent_opt_strategy_logging = do.agent_oracle_secondary.best_response([nature_br_logging], [1], "logging", display=False)
+
+        do.nature_strategies_poaching = []
+        do.nature_strategies_logging = []
+        do.payoffs_poaching = [[] for _ in range(len(all_agent_strategies))]
+        do.payoffs_logging = [[] for _ in range(len(all_agent_strategies))]
+
+        if seed == 1:
+            import pdb; pdb.set_trace()
+        do.update_payoffs(nature_br_poaching, agent_opt_strategy_poaching, payoff_mode='poaching')
+        do.update_payoffs(nature_br_logging, agent_opt_strategy_logging, payoff_mode='logging')
+
+        # this is the second variable
+        # do.nature_strategies_poaching = []
+        # do.nature_strategies_logging = []
+        # do.payoffs_poaching = [[] for _ in range(len(all_agent_strategies))]
+        # do.payoffs_logging = [[] for _ in range(len(all_agent_strategies))]
+    
+        # do.update_payoffs_nature(nature_br_logging, payoff_mode='logging')
+        # do.update_payoffs_nature(nature_br_poaching, payoff_mode='poaching')
+
+        regret_poaching = np.array(do.payoffs_poaching) - np.array(do.payoffs_poaching).max(axis=0)
+        regret_logging = np.array(do.payoffs_logging) - np.array(do.payoffs_logging).max(axis=0)
+
+        do_regret_poaching = -get_payoff(regret_poaching, np.append(agent_eq, [0, 0]), [1.])
+        do_regret_logging = -get_payoff(regret_logging, np.append(agent_eq, [0, 0]), [1.])
+
+        poaching_regrets.append(do_regret_poaching)
+        logging_regrets.append(do_regret_logging)
+
+        regret_poaching_no_max = np.array(do.payoffs_poaching)
+        regret_logging_no_max = np.array(do.payoffs_logging)
+
+        # NOTE: should I just be caching the do.payoffs_poaching without doing the regret step?
+        do_regret_poaching_no_max = -get_payoff(regret_poaching_no_max, np.append(agent_eq, [0, 0]), [1.])
+        do_regret_logging_no_max = -get_payoff(regret_logging_no_max, np.append(agent_eq, [0, 0]), [1.])
+
+        poaching_regrets_no_max.append(do_regret_poaching_no_max)
+        logging_regrets_no_max.append(do_regret_logging_no_max)
+
+    print(poaching_regrets)
+    print(logging_regrets)
+    data = np.array([poaching_regrets, logging_regrets]).T
+    np.savetxt(f'regret_variance_analysis_simulate_reward_agent_br.txt', data)
+    data = np.array([poaching_regrets_no_max, logging_regrets_no_max]).T
+    np.savetxt(f'regret_variance_analysis_simulate_reward_agent_br_no_max.txt', data)
+        # import matplotlib.pyplot as plt
+        # plt.boxplot(data)
+        # plt.savefig(f'regret_variance_analysis_simulate_reward_{n_eval}_no_max.png')
+    
 
 if __name__ == '__main__':
     parser = ArgumentParser(description='Pareto curve evaluation for multi-MIRROR')
@@ -207,31 +331,62 @@ if __name__ == '__main__':
     max_interval = poaching_row['max_interval'].values[0]
     poaching_timestr = poaching_row['time'].values[0]
     logging_timestr = logging_row['time'].values[0]
+    is_toy = poaching_row['is_toy'].values[0]
+    assert is_toy == logging_row['is_toy'].values[0]
+    is_paws = poaching_row['is_paws'].values[0]
+    assert is_paws == logging_row['is_paws'].values[0]
+    exp_seed = poaching_row['seed'].values[0]
+    assert exp_seed == logging_row['seed'].values[0]
+    exp_name = f'seed_{exp_seed}_height_{size}_width_{size}_max_interval_{max_interval}_balance_attract'
 
     agent_strategies, eq_P, eq_L = get_relevant_strategies(poaching_timestr, logging_timestr, size)
-    agent_eqs = get_agent_eqs(agent_strategies)
+    # agent_eqs = get_agent_eqs(agent_strategies)
 
     data = defaultdict(list)
     
-    for agent_eq in agent_eqs + [eq_P, eq_L]:
-        poaching_regret, logging_regret = get_poaching_logging_regrets(agent_strategies,
-                                                                       agent_eq,
-                                                                       size,
-                                                                       budget,
-                                                                       horizon,
-                                                                       nature_n_train,
-                                                                       max_interval
-                                                                       )
-        for i, eq_val in enumerate(agent_eq):
-            data[f'strategy_{i}'].append(eq_val)
-        data['poaching_regret'].append(poaching_regret)
-        data['logging_regret'].append(logging_regret)
-        data['eq_str'].append(str(list(np.round(agent_eq, 2))))
+    agent_eq = [.75, 0, 0, .25]
+    poaching_regret, logging_regret = get_poaching_logging_regrets_variance(agent_strategies,
+                                                                agent_eq,
+                                                                size,
+                                                                budget,
+                                                                horizon,
+                                                                nature_n_train,
+                                                                max_interval,
+                                                                is_toy,
+                                                                is_paws,
+                                                                exp_name,
+                                                                seed)
+    print('done')
+
+    # for agent_eq in tqdm(agent_eqs + [eq_P, eq_L]):
+    # for agent_eq in [[1, 0, 0, 0], [.75, 0, 0, .25], [.25, 0 ,0, .75], [0, 0, 0, 1]]:
+    # for agent_eq in [[.75, 0, 0, .25], [.25, 0 ,0, .75], [0, 0, 0, 1]]:
+    # poaching_regrets = []
+    # logging_regrets = []
+    # for seed in range(20):
+        # poaching_regret, logging_regret = get_poaching_logging_regrets(agent_strategies,
+        #                                                                 agent_eq,
+        #                                                                 size,
+        #                                                                 budget,
+        #                                                                 horizon,
+        #                                                                 nature_n_train,
+        #                                                                 max_interval,
+        #                                                                 is_toy,
+        #                                                                 is_paws,
+        #                                                                 exp_name,
+        #                                                                 seed
+        #                                                                 )
+
+        # for i, eq_val in enumerate(agent_eq):
+        #     data[f'strategy_{i}'].append(eq_val)
+        # data['poaching_regret'].append(poaching_regret)
+        # data['logging_regret'].append(logging_regret)
+        # data['eq_str'].append(str(list(np.round(agent_eq, 2))))
 
     
-    df = pd.DataFrame(data)
-    df.to_csv(f'results/pareto_seed_{seed}_{poaching_timestr}_{logging_timestr}.csv', index=False)
+    # df = pd.DataFrame(data)
+    # df.to_csv(f'results/pareto_seed_{seed}_{poaching_timestr}_{logging_timestr}.csv', index=False)
     
-    graph_pareto(poaching_timestr, logging_timestr, seed)
+    # graph_pareto(poaching_timestr, logging_timestr, seed)
 
 

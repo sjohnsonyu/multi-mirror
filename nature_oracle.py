@@ -67,7 +67,7 @@ class NatureOracle:
         freeze_policy_step: for wake/sleep procedure, how often to freeze policy
         freeze_a_step: for wake/sleep procedure, how often to *unfreeze* attractiveness """
 
-        # initialize with random attractiveness values in interval  # is this in interval?? doesn't seem like it..
+        # initialize with random attractiveness values in interval
         attractiveness = (np.random.rand(self.park_params['n_targets']) - .5) * 2
         attractiveness = attractiveness.astype(float)
         print('attractiveness (raw)', np.round(attractiveness, 3))

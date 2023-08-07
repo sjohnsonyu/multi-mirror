@@ -293,6 +293,7 @@ class Park:
         past_a:  past poacher action
         '''
         assert self.psi >= 1, f'psi is {self.psi}'
+        # TODO if logging, make trees psi = 1
         self.validate_past_a(past_a)
         self.validate_past_c(past_c)
 

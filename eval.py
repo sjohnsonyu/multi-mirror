@@ -269,9 +269,8 @@ def get_poaching_logging_regrets_variance(all_agent_strategies,
         do.nature_strategies_logging = []
         do.payoffs_poaching = [[] for _ in range(len(all_agent_strategies))]
         do.payoffs_logging = [[] for _ in range(len(all_agent_strategies))]
-
-        if seed == 1:
-            import pdb; pdb.set_trace()
+        do.agent_strategies = do.agent_strategies[:4]
+        
         do.update_payoffs(nature_br_poaching, agent_opt_strategy_poaching, payoff_mode='poaching')
         do.update_payoffs(nature_br_logging, agent_opt_strategy_logging, payoff_mode='logging')
 

@@ -4,8 +4,8 @@ used for robust adversarial RL approach
 Lily Xu, 2021
 """
 
-import sys, os
-import pickle
+# import sys, os
+# import pickle
 import numpy as np
 import torch
 import matplotlib.pyplot as plt
@@ -29,8 +29,8 @@ def smooth(x, window_len=11, window='hanning'):
     y = np.convolve(w/w.sum(), s, mode='valid')
     return y
 
-
-def min_reward(park_params, def_strategy, threat_mode, attractiveness_learning_rate=5e-2,
+# TODO add reward_mode and state_mode when calling!
+def min_reward(park_params, def_strategy, reward_mode, attractiveness_learning_rate=5e-2,
         n_iter=400, batch_size=64, visualize=False, init_attractiveness=None):
     """
     given a defender strategy, learn updated attractiveness parameters to minimize reward
@@ -51,7 +51,12 @@ def min_reward(park_params, def_strategy, threat_mode, attractiveness_learning_r
 
     print('initial {}'.format(attractiveness))
 
-    env = Park(attractiveness,
+    attractiveness_secondary = (np.random.rand(park_params['n_targets']) - 0.5) * 2
+    attractiveness_poaching = attractiveness if reward_mode == 'poaching' else attractiveness_secondary
+    attractiveness_logging = attractiveness if reward_mode == 'logging' else attractiveness_secondary
+
+    env = Park(attractiveness_poaching,
+               attractiveness_logging,
                park_params['initial_effort'],
                park_params['initial_wildlife'],
                park_params['initial_trees'],
@@ -65,10 +70,12 @@ def min_reward(park_params, def_strategy, threat_mode, attractiveness_learning_r
                park_params['alpha'],
                park_params['beta'],
                park_params['eta'],
-               threat_mode,
-               param_int=park_params['param_int'])
+               reward_mode,
+               param_int_poaching=park_params['param_int'],
+               param_int_logging=park_params['param_int_logging']
+               )
 
-    state = env.reset()
+    state = env.reset(reward_mode)
 
     all_r = []
 
@@ -77,11 +84,11 @@ def min_reward(park_params, def_strategy, threat_mode, attractiveness_learning_r
         for i in range(batch_size):
             action = def_strategy.select_action(state)
             action = torch.FloatTensor(action)
-            next_state, reward, done, info = env.step(action, use_torch=True)
+            next_state, reward, done, info = env.step(action, reward_mode, use_torch=True)
             rewards.append(info['expected_reward'])
 
             if done:
-                state = env.reset()
+                state = env.reset(reward_mode)
 
         loss = torch.sum(torch.stack(rewards))
 

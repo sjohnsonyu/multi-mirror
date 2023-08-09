@@ -4,17 +4,14 @@ implement DDPG for nature oracle
 Lily Xu, 2021
 """
 
-import os, sys
-import numpy as np
+# import os, sys
+# import numpy as np
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
+# import torch.nn.functional as F
 
-from ddpg import Critic, Actor, NormalizedEnv, ReplayBuffer
-
-import random
-from collections import deque
+from ddpg import Critic, Actor, ReplayBuffer #NormalizedEnv
 
 
 class NatureDDPG:
@@ -39,8 +36,8 @@ class NatureDDPG:
 
         ##### networks
         # randomly initialize critic and actor network
-        self.actor         = Actor(self.states_dim, self.actions_dim)
-        self.critic        = Critic(self.states_dim + self.actions_dim, 1)
+        self.actor = Actor(self.states_dim, self.actions_dim)
+        self.critic = Critic(self.states_dim + self.actions_dim, 1)
 
         # initialize critic and actor target network
         self.actor_target  = Actor(self.states_dim, self.actions_dim)
@@ -89,9 +86,9 @@ class NatureDDPG:
     def update(self, batch_size, display=False):
         states, actions, rewards, next_states, dones = self.memory.sample(batch_size)
 
-        states      = torch.stack(states)
-        actions     = torch.stack(actions)
-        rewards     = torch.stack(rewards)
+        states = torch.stack(states)
+        actions = torch.stack(actions)
+        rewards = torch.stack(rewards)
         next_states = torch.stack(next_states)
 
         # update critic by minimizing loss

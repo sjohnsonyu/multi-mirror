@@ -10,15 +10,14 @@ from min_reward_oracle import min_reward
 # baselines
 ###################################################
 
-def use_middle(param_int, agent_oracle, threat_mode):
+def use_middle(param_int, agent_oracle, reward_mode):
     """ solve optimal reward relative to midpoint of uncertainty interval
     sequential policy, but based on the center of the uncertainty set """
-
     attractiveness = param_int.mean(axis=1)
-    agent_br = agent_oracle.best_response([attractiveness], [1.], threat_mode, display=True)
+    agent_br = agent_oracle.best_response([attractiveness], [1.], reward_mode, display=True)
     return agent_br
 
-def maximin(park_params, agent_oracle, threat_mode):
+def maximin(park_params, agent_oracle, reward_mode):
     """ maximize min reward, analogous to robust adversarial RL (RARL) """
     # n_iters = 10
     n_iters = 5
@@ -30,11 +29,11 @@ def maximin(park_params, agent_oracle, threat_mode):
     batch_size = 4
 
     for iter in range(n_iters):
-        agent_strategy = agent_oracle.best_response([attractiveness], [1.], threat_mode, display=False)
+        agent_strategy = agent_oracle.best_response([attractiveness], [1.], reward_mode, display=False)
         if iter == n_iters - 1: break
         attractiveness = min_reward(park_params,
                                     agent_strategy,
-                                    threat_mode,
+                                    reward_mode,
                                     attractiveness_learning_rate=5e-2,
                                     n_iter=min_reward_iters,
                                     batch_size=batch_size,
@@ -43,7 +42,7 @@ def maximin(park_params, agent_oracle, threat_mode):
 
     return agent_strategy
 
-def RARL_regret(park_params, agent_oracle, nature_oracle, threat_mode):
+def RARL_regret(park_params, agent_oracle, nature_oracle, reward_mode):
     """ use a weakened form of MIRROR that is equivalent to RARL with regret,
     using the nature oracle to compute regret instead of maximin reward """
     # n_iters = 10
@@ -55,9 +54,9 @@ def RARL_regret(park_params, agent_oracle, nature_oracle, threat_mode):
     attractiveness = attractiveness.astype(float)
 
     for iter in range(n_iters):
-        agent_strategy = agent_oracle.best_response([attractiveness], [1.], threat_mode, display=False)
+        agent_strategy = agent_oracle.best_response([attractiveness], [1.], reward_mode, display=False)
         if iter == n_iters - 1: break
-        attractiveness = nature_oracle.best_response([agent_strategy], [1.], display=False)
+        attractiveness = nature_oracle.best_response([agent_strategy], [1.], [reward_mode], reward_mode, display=False)
 
     return agent_strategy
 

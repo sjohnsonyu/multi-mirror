@@ -26,6 +26,10 @@ class NatureDDPG:
                  tau=1e-2,
                  memory_max_size=50000):
 
+        actor_learning_rate = 1e-4
+        critic_learning_rate = 1e-3
+        attractiveness_learning_rate=1e-2
+
         # params
         self.states_dim = 3 * n_targets + 1  # effort, wildlife, attractiveness, timestep
         self.actions_dim = n_targets  # alternative pi

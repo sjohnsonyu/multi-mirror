@@ -96,8 +96,10 @@ class DoubleOracle:
         self.logging_param_int = read_write_initialization_vals(self.logging_param_int, '_logging_param_int.txt', initialization_path, write_initialization, read_initialization)
         
         print('OVERRIDING param_ints for debugging purposes!')
-        self.hunting_param_int = np.array([[-10, -8], [-10, -8], [-10, -8], [10, 12]])
-        self.logging_param_int = np.array([[-10, -8], [-10, -8], [-10, -8], [10, 12]])
+        # self.hunting_param_int = np.array([[-10, -8], [-10, -8], [-1, 1], [10, 12]])
+        # self.logging_param_int = np.array([[10, 12], [-10, -8], [-1, 1], [-10, -8]])
+        self.hunting_param_int = np.array([[2, 4], [0, 2], [-2, 0], [-4, -2]])
+        self.logging_param_int = np.array([[-4, -2], [-2, 0], [0, 2], [2, 4]])
 
         if self.verbose:
             print('hunting_param_int', np.round(self.hunting_param_int, 2))
@@ -193,6 +195,7 @@ class DoubleOracle:
 
             agent_br = self.agent_oracle.best_response(nature_strategies, nature_eq, reward_mode=self.objective, display=False)
             nature_br = self.nature_oracle.best_response(self.agent_strategies, agent_eq, self.agent_policy_modes, self.objective, display=False)
+            print('nature_br', nature_br)
             # TODO do we even need to do this? seems unlikely
             # nature_br_secondary = self.nature_oracle_secondary.best_response(self.agent_strategies, agent_eq, self.agent_policy_modes, self.secondary, display=False)
             # REWARD RANDOMIZATION
@@ -544,8 +547,8 @@ if __name__ == '__main__':
     for i in range(n_perturb+1):
         param_int = do.hunting_param_int if objective == 'poaching' else do.logging_param_int
         baseline_middle = use_middle(param_int, do.agent_oracle, objective)
-        import pdb; pdb.set_trace()
         nature_br = do.nature_oracle.best_response([baseline_middle], [1], [objective], objective, display=False)
+        # import pdb; pdb.set_trace()
 
         do.update_payoffs_agent(baseline_middle, policy_mode=objective)
     middle_time = (time.time() - start_time) / (n_perturb+1)

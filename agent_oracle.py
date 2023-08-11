@@ -181,7 +181,7 @@ def run_DDPG(park_params, nature_strategies, nature_distrib, checkpoints, n_trai
     ddpg = DDPG(park_params['n_targets'], verbose=verbose)
 
     # batch_size = 128
-    batch_size = 4
+    batch_size = 32
     # batch_size = 1
     rewards = []
     avg_rewards = []
@@ -215,7 +215,9 @@ def run_DDPG(park_params, nature_strategies, nature_distrib, checkpoints, n_trai
                    park_params['alpha'],
                    park_params['beta'],
                    park_params['eta'],
-                   reward_mode
+                   reward_mode,
+                   param_int_poaching=park_params['param_int'],  # added 2023.08.11 10:11am
+                   param_int_logging=park_params['param_int_logging']  # added 2023.08.11 10:11am
                    )
 
         # initialize the environment and state
@@ -226,8 +228,8 @@ def run_DDPG(park_params, nature_strategies, nature_distrib, checkpoints, n_trai
 
             next_state, reward, done, info = env.step(action, state_mode=reward_mode)
             reward = info['expected_reward']  # use expected reward
-            if i_episode % 10 == 0:
-                print(reward, action, next_state[:4])
+            if i_episode % 20 == 0:
+                print(np.round(reward, 2), np.round(action, 2), np.round(next_state[:4], 2))
             ddpg.memory.push(state, action, np.expand_dims(reward, axis=0), next_state, done)
 
             if len(ddpg.memory) > batch_size:

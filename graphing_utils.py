@@ -43,9 +43,11 @@ def plot_scatter(poaching_row, logging_row, exp_timestrs):
     fig = plt.figure()
     ax = fig.add_subplot(111)
     for i in range(len(bar_vals_poaching)):
+        if i in [2, 3, 5, 6, 7, 8]: continue
         plt.scatter(bar_vals_poaching[i], bar_vals_logging[i])
     
     for i, label in enumerate(tick_names):
+        if i in [2, 3, 5, 6, 7, 8]: continue
         ax.annotate(label, (bar_vals_poaching[i] + 0.01, bar_vals_logging[i] + 0.01))
 
     plt.xlabel('avg poaching regret')
@@ -93,12 +95,13 @@ def validate_comparable(poaching_row, logging_row):
 def graph_pareto(poaching_timestr, logging_timestr, seed):
     filename = f'results/pareto_seed_{seed}_{poaching_timestr}_{logging_timestr}.csv'
     df = pd.read_csv(filename)
+
     fig = plt.figure()
     ax = fig.add_subplot(111)
     plt.scatter(df['poaching_regret'], df['logging_regret'])
     
-    for i, label in enumerate(df['eq_str']):
-        ax.annotate(label, (df['poaching_regret'][i] + 0.001, df['logging_regret'][i] + 0.001))
+    for i, label in enumerate(list(df['eq_str'])):
+        ax.annotate(label, (list(df['poaching_regret'])[i] + 0.001, list(df['logging_regret'])[i] + 0.001))
 
     plt.xlabel('avg poaching regret')
     plt.ylabel('avg logging regret')

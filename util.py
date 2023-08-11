@@ -1,7 +1,7 @@
 import numpy as np
 
 
-NUM_REWARD_ITERS = 5
+NUM_REWARD_ITERS = 1
 
 def read_write_initialization_vals(arr, name, exp_path, write_initialization, read_initialization):
     full_path = exp_path + name

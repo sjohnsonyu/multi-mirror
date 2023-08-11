@@ -74,7 +74,7 @@ def get_relevant_strategies(poaching_timestr, logging_timestr, size):
 
 def get_agent_poaching_logging_eq(all_agent_strategies, agent_policy_modes, agent_eq):
     agent_policy_modes = np.array(agent_policy_modes)
-    assert all_agent_strategies.shape == agent_policy_modes.shape 
+    assert len(all_agent_strategies) == len(agent_policy_modes)
     agent_eq_poaching_inds = np.argwhere(agent_policy_modes == 'poaching')
     agent_eq_poaching_mask = np.zeros(agent_policy_modes.shape)
     agent_eq_poaching_mask[agent_eq_poaching_inds] = 1
@@ -108,7 +108,11 @@ def get_poaching_logging_regrets(all_agent_strategies,
     
     torch.manual_seed(seed)
     np.random.seed(seed)
-                      
+
+    print('CHANGING ITERS')
+    agent_n_train = 50
+    nature_n_train = 50
+
     do = DoubleOracle(max_epochs=0,
                       height=size,
                       width=size,
@@ -116,7 +120,7 @@ def get_poaching_logging_regrets(all_agent_strategies,
                       horizon=horizon,
                       n_perturb=0,
                       n_eval=50,
-                      agent_n_train=0,
+                      agent_n_train=agent_n_train,  # TODO bump this up!
                       nature_n_train=nature_n_train,
                       psi=PSI,
                       alpha=ALPHA,
@@ -134,62 +138,77 @@ def get_poaching_logging_regrets(all_agent_strategies,
                       objective="poaching",
                       verbose=False
                       )
-    do.agent_strategies = all_agent_strategies.copy()
+    do.agent_strategies = all_agent_strategies[:4]  # HACK!!!
+    agent_policy_modes = agent_policy_modes[:4]  # HACK!!!
     agent_eq_poaching, agent_eq_logging = get_agent_poaching_logging_eq(all_agent_strategies, agent_policy_modes, agent_eq)
 
     nature_br_poaching_seed = do.nature_oracle.best_response(all_agent_strategies, agent_eq_poaching, agent_policy_modes, 'poaching', display=False)
     nature_br_logging_seed = do.nature_oracle.best_response(all_agent_strategies, agent_eq_logging, agent_policy_modes, 'logging', display=False)
 
+    # import pdb; pdb.set_trace()
     nature_br_poaching = do.nature_oracle.best_response(all_agent_strategies,
                                                         agent_eq,
                                                         agent_policy_modes,
-                                                        'logging'
-                                                        nature_strategies_secondary=nature_br_logging_seed,
+                                                        'poaching',
+                                                        nature_strategies_secondary=[nature_br_logging_seed],
                                                         nature_strategies_secondary_distrib=[1],
                                                         display=False)
     nature_br_logging = do.nature_oracle.best_response(all_agent_strategies,
                                                        agent_eq,
                                                        agent_policy_modes,
-                                                       'poaching'
-                                                       nature_strategies_secondary=nature_br_poaching_seed,
+                                                       'logging',
+                                                       nature_strategies_secondary=[nature_br_poaching_seed],
                                                        nature_strategies_secondary_distrib=[1],
                                                        display=False)
     
     agent_opt_strategy_poaching = do.agent_oracle.best_response([nature_br_poaching], [1], 'poaching', display=False)
-    agent_opt_strategy_logging = do.agent_oracle_secondary.best_response([nature_br_logging], [1], 'logging', display=False)
+    agent_opt_strategy_logging = do.agent_oracle.best_response([nature_br_logging], [1], 'logging', display=False)
 
     # TODO not totally sure about these seeds
-    do.nature_strategies_poaching = [nature_br_poaching_seed]
-    do.nature_strategies_logging = [nature_br_logging_seed]
+    # do.nature_strategies_poaching = [nature_br_poaching_seed] 
+    # do.nature_strategies_logging = [nature_br_logging_seed]
+    do.nature_strategies_poaching = [] 
+    do.nature_strategies_logging = []
     do.payoffs_poaching = [[] for _ in range(len(all_agent_strategies))]
     do.payoffs_logging = [[] for _ in range(len(all_agent_strategies))]
+    do.agent_policy_modes = agent_policy_modes
 
     # do.update_payoffs(nature_br_poaching, agent_opt_strategy_poaching, payoff_mode='poaching')
     # do.update_payoffs(nature_br_logging, agent_opt_strategy_logging, payoff_mode='logging')
 
-    import pdb; pdb.set_trace()
     print('pausing to make sure I\'m managing the payoffs appropriately')
+    
+    do.nature_strategies_logging = [nature_br_logging_seed]
+    do.update_payoffs_nature(nature_br_poaching_seed,
+                            reward_mode='poaching',
+                            nature_strategies_secondary_distrib=[1])
     do.update_payoffs_agent(agent_opt_strategy_poaching,
                                 policy_mode='poaching')
     # TODO what to use for nature_eq???
     do.update_payoffs_nature(nature_br_poaching,
                             reward_mode='poaching',
+                            nature_strategies_secondary_distrib=[1, 0])
+    regret_poaching = np.array(do.payoffs_poaching) - np.array(do.payoffs_poaching).max(axis=0)
+    
+    do.nature_strategies_logging = []
+    do.nature_strategies_poaching = [nature_br_poaching_seed] 
+    do.payoffs_logging = [[] for _ in range(len(all_agent_strategies))]
+    do.agent_strategies = do.agent_strategies[:4]
+    do.update_payoffs_nature(nature_br_logging_seed,
+                            reward_mode='logging',
                             nature_strategies_secondary_distrib=[1])
-
     do.update_payoffs_agent(agent_opt_strategy_logging,
                                 policy_mode='logging')
     # TODO what to use for nature_eq???
     do.update_payoffs_nature(nature_br_logging,
                             reward_mode='logging',
                             nature_strategies_secondary_distrib=[1, 0])
-
     
-    regret_poaching = np.array(do.payoffs_poaching) - np.array(do.payoffs_poaching).max(axis=0)
     regret_logging = np.array(do.payoffs_logging) - np.array(do.payoffs_logging).max(axis=0)
 
-    
-    do_regret_poaching = -get_payoff(regret_poaching, np.append(agent_eq, [0, 0]), [1.])
-    do_regret_logging = -get_payoff(regret_logging, np.append(agent_eq, [0, 0]), [1.])
+    # import pdb; pdb.set_trace()
+    do_regret_poaching = -get_payoff(regret_poaching, np.append(agent_eq, 0), [0, 1])
+    do_regret_logging = -get_payoff(regret_logging, np.append(agent_eq, 0), [0, 1])
 
     # now log these puppies!
     print('agent_eq', agent_eq)
@@ -245,10 +264,10 @@ def get_agent_eqs(agent_strategies):
                 agent_eqs.append(quarters_split_eq)
 
                 # print("skipping for speed!")
-                quarters_two_eq = np.array([0.25, 0.25, 0.25, 0.25])
-                quarters_two_eq[i] = 0.75
-                quarters_two_eq[j] = 0
-                agent_eqs.append(quarters_two_eq)
+                # quarters_two_eq = np.array([0.25, 0.25, 0.25, 0.25])
+                # quarters_two_eq[i] = 0.75
+                # quarters_two_eq[j] = 0
+                # agent_eqs.append(quarters_two_eq)
     return agent_eqs
 
 
@@ -405,7 +424,10 @@ if __name__ == '__main__':
     #                                                             seed)
 
 
-    for agent_eq in tqdm(agent_eqs + [eq_P, eq_L]):
+    # for agent_eq in tqdm(agent_eqs + [eq_P, eq_L]):
+    # for agent_eq in tqdm([[.75, 0, 0, .25], [.25, 0 ,0, .75], [0.25, 0.25, 0.25, 0.25], [0, .25, .75, 0], [0, .75, .25, 0], eq_P, eq_L]):
+    for agent_eq in tqdm([[.75, 0, .25, 0], [.25, 0, .75, 0], [0, .25, 0, .75], [0, .75, 0, .25]]):
+    # for agent_eq in tqdm([eq_L]):
     # for agent_eq in [[1, 0, 0, 0], [.75, 0, 0, .25], [.25, 0 ,0, .75], [0, 0, 0, 1]]:
     # for agent_eq in [[.75, 0, 0, .25], [.25, 0 ,0, .75], [0, 0, 0, 1]]:
     # poaching_regrets = []
@@ -424,6 +446,7 @@ if __name__ == '__main__':
                                                                        exp_name,
                                                                        seed
                                                                        )
+        print('RESULTS', agent_eq, poaching_regret, logging_regret)
 
         for i, eq_val in enumerate(agent_eq):
             data[f'strategy_{i}'].append(eq_val)
@@ -433,7 +456,7 @@ if __name__ == '__main__':
 
     
     df = pd.DataFrame(data)
-    df.to_csv(f'results/pareto_seed_{seed}_{poaching_timestr}_{logging_timestr}.csv', index=False)
+    df.to_csv(f'results/pareto_seed_{seed}_{poaching_timestr}_{logging_timestr}', index=False)
     
     graph_pareto(poaching_timestr, logging_timestr, seed)
 

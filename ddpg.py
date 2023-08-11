@@ -124,6 +124,12 @@ class DDPG:
         critic_learning_rate=1e-3, gamma=0.99, tau=1e-2,
         memory_max_size=50000, verbose=False):
 
+        actor_learning_rate = 1e-5
+        critic_learning_rate = 1e-4
+        # actor_learning_rate = 1e-5
+        # critic_learning_rate = 1e-4
+
+
         # params
         self.states_dim = 2 * n_targets + 1
         self.actions_dim = n_targets

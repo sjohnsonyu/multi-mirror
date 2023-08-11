@@ -221,15 +221,14 @@ class NatureOracle:
             episode_reward = 0
 
             a = convert_to_a(env.get_attractiveness(state_mode).detach().numpy(), env.get_param_int(state_mode))
+
             if i_display:
                 # print('episode {} attractiveness {} raw {}'.format(i_episode, np.round(a, 3), np.round(raw_a, 3)))
                 print('episode {} attractiveness {} raw {}'.format(i_episode, np.round(a, 3), np.round(a, 3)))
-            state = torch.cat([state, attractiveness_primary])  # NOTE: not a? (maybe not because of gradient tracking)
+            state = torch.cat([state, attractiveness_primary])
 
             # for timesteps in one episode
             for t in itertools.count():
-                # NOTE: I think since it's the same ddpg obj, it should always be reward mode?
-                # but at the same time there's something that feels wrong about that...
                 action = ddpg.select_action(state)
 
                 next_state, reward, done, info = env.step(action, reward_mode, use_torch=True)
@@ -239,6 +238,8 @@ class NatureOracle:
                 if i_display:
                     print('t {} action {} reward {:.3f}'. format(t, np.round(action.detach().numpy(), 3), reward.item()))
 
+                if i_episode % 20 == 0:
+                    print('attractiveness', np.round(a, 2), 'reward', reward.detach().item())
                 reward = reward - agent_avg_reward[t]  # want to max agent regret
                 reward = reward.unsqueeze(0)
                 ddpg.memory.push(state, action, reward, next_state, done)

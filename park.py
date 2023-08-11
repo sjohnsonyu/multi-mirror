@@ -164,7 +164,7 @@ class Park:
         poaching_use_torch, logging_use_torch = self.get_torch_modes(use_torch, state_mode)
         # ensure action is legal
         assert action.sum() <= self.budget + 1e-5
-
+        # import pdb; pdb.set_trace()
         p_attack_poaching = self.adv_behavior(self.attractiveness_poaching, self.param_int_poaching, action, poaching_use_torch)
         p_attack_logging = self.adv_behavior(self.attractiveness_logging, self.param_int_logging, action, logging_use_torch)
 
@@ -251,13 +251,11 @@ class Park:
         assert self.beta < 0, self.beta
         assert self.eta >= 0, self.eta
 
-
         if param_int is not None:
             a = convert_to_a(attractiveness, param_int, use_torch=use_torch)
         else:
             a = attractiveness
         
-
         if not use_torch and isinstance(past_effort, torch.Tensor):
             past_effort = past_effort.detach().numpy()
 

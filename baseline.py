@@ -14,7 +14,7 @@ def use_middle(param_int, agent_oracle, reward_mode):
     """ solve optimal reward relative to midpoint of uncertainty interval
     sequential policy, but based on the center of the uncertainty set """
     attractiveness = param_int.mean(axis=1)
-    # attractiveness = np.zeros(param_int.shape[0])  # TODO try this; raw attractiveness
+    attractiveness = np.zeros(param_int.shape[0])  # TODO try this; raw attractiveness
     agent_br = agent_oracle.best_response([attractiveness], [1.], reward_mode, display=True)
     return agent_br
 

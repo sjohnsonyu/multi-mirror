@@ -103,7 +103,8 @@ class NatureOracle:
 
         ddpg = NatureDDPG(self.park_params['n_targets'], attractiveness_primary, actor_learning_rate=10, critic_learning_rate=10)
 
-        batch_size  = 10
+        batch_size = 4
+        # batch_size  = 1
         rewards = []
         avg_rewards = []
 
@@ -232,6 +233,7 @@ class NatureOracle:
                 action = ddpg.select_action(state)
 
                 next_state, reward, done, info = env.step(action, reward_mode, use_torch=True)
+                # print(state, action, next_state, reward)
                 next_state = torch.cat([next_state, attractiveness_primary])
 
                 if i_display:

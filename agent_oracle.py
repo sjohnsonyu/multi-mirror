@@ -11,6 +11,7 @@ import itertools
 import numpy as np
 # import torch
 # from collections.abc import Iterable
+# from scipy.stats import sem
 
 from park import Park
 from ddpg import *
@@ -42,33 +43,18 @@ class AgentOracle:
         if agent_distrib=None, agent_strategies only a single strategy
         if nature_distrib=None, nature_strategies only a single strategy """
         assert agent_distrib is None, "simulate_reward hasn't been implemented for evaluating multiple strategies"
+        assert nature_distrib is None, "simulate_reward hasn't been implemented for evaluating multiple strategies"
         # TODO need to make sure that nature_strategy matches up with the reward mode
-
-        if agent_distrib is None:
-            assert len(agent_strategies) == 1
-            agent_strategy = agent_strategies[0]
-            agent_mode = agent_policy_modes[0]
-        else:
-            assert len(agent_strategies) == len(agent_distrib)
-
-        if nature_distrib is None:
-            assert len(nature_strategies) == 1
-            attractiveness_primary = nature_strategies[0]
-        else:
-            assert len(nature_strategies) == len(nature_distrib)
+        assert len(agent_strategies) == 1
+        agent_strategy = agent_strategies[0]
+        agent_mode = agent_policy_modes[0]
+        assert len(nature_strategies) == 1
+        attractiveness_primary = nature_strategies[0]
 
         rewards = np.zeros(self.n_eval)
         for i_episode in range(self.n_eval):
-            if nature_distrib is not None:
-                nature_strategy_i = sample_strategy(nature_distrib)
-                attractiveness_primary = nature_strategies[nature_strategy_i]
-            if agent_distrib is not None:
-                agent_strategy_i = sample_strategy(agent_distrib)
-                agent_strategy = agent_strategies[agent_strategy_i]
-
             if attractiveness_secondary is None:
                 attractiveness_secondary = (np.random.rand(*attractiveness_primary.shape) - 0.5) * 2
-
             attractiveness_poaching = attractiveness_primary if reward_mode == 'poaching' else attractiveness_secondary
             attractiveness_logging = attractiveness_primary if reward_mode == 'logging' else attractiveness_secondary
 
@@ -98,7 +84,6 @@ class AgentOracle:
             for t in itertools.count():
                 # select and perform an action
                 action = agent_strategy.select_action(state)
-
                 # if DDPG (which returns softmax): take action up to budget and then clip each location to be between 0 and 1
                 if isinstance(agent_strategy, DDPG):
                     before_sum = action.sum()
@@ -117,12 +102,12 @@ class AgentOracle:
                 if done:
                     rewards[i_episode] = reward
                     break
-
+        # print(len(rewards), np.mean(rewards), sem(rewards))
         avg_reward = np.mean(rewards)
         return avg_reward
 
 
-    def best_response(self, nature_strategies, nature_distrib, reward_mode, display=False):
+    def best_response(self, nature_strategies, nature_distrib, reward_mode, display=False, verbose=False):
         # NOTE: nature_strategies refers to the poaching strategies when poaching is the objective,
         # and logging strategies when logging is the objective
         assert len(nature_strategies) == len(nature_distrib), 'nature strategies {}, distrib {}'.format(len(nature_strategies), len(nature_distrib))
@@ -132,7 +117,8 @@ class AgentOracle:
                                           self.checkpoints,
                                           self.n_train,
                                           reward_mode,
-                                          display=display)
+                                          display=display,
+                                          verbose=verbose)
 
         return br
 
@@ -188,13 +174,15 @@ class AgentOracle:
         return np.array(policy), np.array(rewards), np.array(states)
         
 
-def run_DDPG(park_params, nature_strategies, nature_distrib, checkpoints, n_train, reward_mode, display=True):
-    state_dim  = 2*park_params['n_targets'] + 1
-    action_dim = park_params['n_targets']
+def run_DDPG(park_params, nature_strategies, nature_distrib, checkpoints, n_train, reward_mode, display=True, verbose=False):
+    # state_dim  = 2*park_params['n_targets'] + 1
+    # action_dim = park_params['n_targets']
 
-    ddpg = DDPG(park_params['n_targets'])
+    ddpg = DDPG(park_params['n_targets'], verbose=verbose)
 
-    batch_size = 128
+    # batch_size = 128
+    batch_size = 4
+    # batch_size = 1
     rewards = []
     avg_rewards = []
     checkpoint_rewards = []
@@ -238,7 +226,8 @@ def run_DDPG(park_params, nature_strategies, nature_distrib, checkpoints, n_trai
 
             next_state, reward, done, info = env.step(action, state_mode=reward_mode)
             reward = info['expected_reward']  # use expected reward
-
+            if i_episode % 10 == 0:
+                print(reward, action, next_state[:4])
             ddpg.memory.push(state, action, np.expand_dims(reward, axis=0), next_state, done)
 
             if len(ddpg.memory) > batch_size:

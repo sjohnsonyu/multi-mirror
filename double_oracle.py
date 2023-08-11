@@ -21,7 +21,7 @@ from nature_oracle import NatureOracle, sample_strategy
 from nfg_solver import solve_game, solve_minimax_regret, get_payoff, get_nature_best_strategy
 
 from baseline import use_middle, maximin, RARL_regret, RandomPolicy
-from util import read_write_initialization_vals, read_write_initialization_pickle
+from util import read_write_initialization_vals, read_write_initialization_pickle, NUM_REWARD_ITERS
 
 if not os.path.exists('plots'):
     os.makedirs('plots')
@@ -95,10 +95,15 @@ class DoubleOracle:
         self.hunting_param_int = read_write_initialization_vals(self.hunting_param_int, '_hunting_param_int.txt', initialization_path, write_initialization, read_initialization)
         self.logging_param_int = read_write_initialization_vals(self.logging_param_int, '_logging_param_int.txt', initialization_path, write_initialization, read_initialization)
         
+        print('OVERRIDING param_ints for debugging purposes!')
+        self.hunting_param_int = np.array([[-10, -8], [-10, -8], [-10, -8], [10, 12]])
+        self.logging_param_int = np.array([[-10, -8], [-10, -8], [-10, -8], [10, 12]])
+
         if self.verbose:
             print('hunting_param_int', np.round(self.hunting_param_int, 2))
             print('logging_param_int', np.round(self.logging_param_int, 2))
 
+        
 
         def gkern(kernlen=21, std=3):
             """ returns a 2D Gaussian kernel array """
@@ -151,8 +156,6 @@ class DoubleOracle:
             print('initial trees {:.2f} {}'.format(np.sum(initial_trees), np.round(initial_trees, 2)))
 
         self.agent_oracle = AgentOracle(self.park_params, checkpoints, agent_n_train, n_eval)
-        # TODO maybe remove the secondary?
-        # self.agent_oracle_secondary = AgentOracle(self.park_params, checkpoints, agent_n_train, n_eval)
         self.nature_oracle = NatureOracle(self.park_params,
                                           checkpoints,
                                           nature_n_train,
@@ -160,23 +163,16 @@ class DoubleOracle:
                                           freeze_policy_step,
                                           freeze_a_step
                                          )
-        # TODO is there a point in having these separated out or not?
-        # self.nature_oracle_secondary = NatureOracle(self.park_params,
-        #                                           checkpoints,
-        #                                           nature_n_train,
-        #                                           use_wake,
-        #                                           freeze_policy_step,
-        #                                           freeze_a_step
-        #                                         )
         # initialize attractiveness
-        init_attractiveness_poaching = (np.random.rand(self.n_targets) - .5) * 2
-        init_attractiveness_logging = (np.random.rand(self.n_targets) - .5) * 2
+        init_attractiveness = (np.random.rand(self.n_targets) - .5) * 2
 
         # initialize strategy sets
         self.agent_strategies  = []  # agent policy
         self.agent_policy_modes = []
-        self.nature_strategies_poaching = [init_attractiveness_poaching]  # attractiveness
-        self.nature_strategies_logging = [init_attractiveness_logging]  # attractiveness
+        self.nature_strategies_poaching = []
+        self.nature_strategies_logging = []  # attractiveness
+        nature_strategies = self.nature_strategies_poaching if self.objective == 'poaching' else self.nature_strategies_logging
+        nature_strategies.append(init_attractiveness)
         self.payoffs_poaching = [] # agent regret for each (agent strategy, attractiveness) combo
         self.payoffs_logging = [] # agent regret for each (agent strategy, attractiveness) combo
 
@@ -227,12 +223,6 @@ class DoubleOracle:
 
         return agent_eq, nature_eq
 
-    # def compute_regret(self, agent_s, nature_s, max_reward, threat_mode):
-    #     reward = self.agent_oracle.simulate_reward([agent_s], [nature_s], threat_mode, display=False)
-    #     regret = max_reward - reward
-    #     if regret < 0:
-    #         print('  uh oh! regret is negative. max reward {:.3f}, reward {:.3f}'.format(max_reward, reward))
-    #     return regret
 
     def compute_payoff_regret(self, agent_eq, payoff_mode='poaching'):
         """ given a agent mixed strategy, compute the expected regret in the payoff matrix """
@@ -251,6 +241,27 @@ class DoubleOracle:
             return -np.min(strategy_regrets) # return max regret (min reward)
         else:
             raise Exception('not implemented')
+        
+
+    def compute_payoff_regret_nature_eq(self, agent_eq, nature_eq, payoff_mode='poaching'):
+        """ given a agent mixed strategy, compute the expected regret in the payoff matrix """
+        assert abs(sum(agent_eq) - 1) <= 1e-3
+        
+        if payoff_mode == 'poaching':
+            payoffs = do.payoffs_poaching
+        else:
+            payoffs = do.payoffs_logging
+
+        regret = np.array(payoffs) - np.array(payoffs).max(axis=0)
+        # if agent playing a pure strategy
+        if len(np.where(agent_eq > 0)[0]) == 1:
+            agent_strategy_i = np.where(agent_eq > 0)[0].item()
+            strategy_regrets = regret[agent_strategy_i]
+            return -np.min(strategy_regrets) # return max regret (min reward)
+        else:
+            raise Exception('not implemented')
+    
+
 
     def find_equilibrium(self, payoff_mode):
         """ solve for minimax regret-optimal mixed strategy """
@@ -276,30 +287,33 @@ class DoubleOracle:
         """ update payoff matrix (only adding agent strategy)
 
         returns index of new strategy """
+        assert nature_strategies_secondary_distrib is None, 'I think this arg is not needed'
         self.agent_strategies.append(agent_br)
         self.agent_policy_modes.append(policy_mode)
 
         new_payoffs_poaching = []
         for nature_s_poaching in self.nature_strategies_poaching:
-            # TODO consider rerunning over multiple iterations
-            nature_s_logging = self.get_secondary_nature_strategy('poaching', policy_mode, nature_strategies_secondary_distrib)
+            # TODO double-check that it makes sense to not include attractiveness_secondary here
+            # in poaching-major case, this will only be activated when we have our logging-major thing
+            # in which case we have trash logging values anyways
+            # nature_s_logging = self.get_secondary_nature_strategy('poaching', policy_mode, nature_strategies_secondary_distrib)
             reward = self.agent_oracle.simulate_reward([agent_br],
                                                        [nature_s_poaching],
                                                        [policy_mode],
                                                        'poaching',
-                                                       attractiveness_secondary=nature_s_logging,
+                                                       attractiveness_secondary=None,
                                                        display=False)
             new_payoffs_poaching.append(reward)
         self.payoffs_poaching.append(new_payoffs_poaching)
 
         new_payoffs_logging = []
         for nature_s_logging in self.nature_strategies_logging:
-            nature_s_poaching = self.get_secondary_nature_strategy('logging', policy_mode, nature_strategies_secondary_distrib)
+            # nature_s_poaching = self.get_secondary_nature_strategy('logging', policy_mode, nature_strategies_secondary_distrib)
             reward = self.agent_oracle.simulate_reward([agent_br],
                                                        [nature_s_logging],
                                                        [policy_mode],
                                                        'logging',
-                                                       attractiveness_secondary=nature_s_poaching,
+                                                       attractiveness_secondary=None,
                                                        display=False)
             new_payoffs_logging.append(reward)
         self.payoffs_logging.append(new_payoffs_logging)
@@ -318,13 +332,17 @@ class DoubleOracle:
         # for new nature strategy: compute regret w.r.t. all agent strategies
         for i, agent_s in enumerate(self.agent_strategies):
             agent_mode = self.agent_policy_modes[i]
-            nature_s_secondary = self.get_secondary_nature_strategy(reward_mode, agent_mode, nature_strategies_secondary_distrib)
-            reward = self.agent_oracle.simulate_reward([agent_s],
-                                                       [nature_br],
-                                                       [agent_mode],
-                                                       reward_mode,
-                                                       display=False,
-                                                       attractiveness_secondary=nature_s_secondary)
+            rewards = []
+            for _ in range(NUM_REWARD_ITERS):
+                nature_s_secondary = self.get_secondary_nature_strategy(reward_mode, agent_mode, nature_strategies_secondary_distrib)
+                reward = self.agent_oracle.simulate_reward([agent_s],
+                                                           [nature_br],
+                                                           [agent_mode],
+                                                           reward_mode,
+                                                           display=False,
+                                                           attractiveness_secondary=nature_s_secondary)
+                rewards.append(reward)
+            reward = np.mean(rewards)
             if reward_mode == 'poaching':
                 self.payoffs_poaching[i].append(reward)
             else:
@@ -351,6 +369,18 @@ class DoubleOracle:
                 print(states)
                 print()
 
+def print_regret_stats(reward_mode, do):
+    print()
+    payoffs = do.payoffs_poaching if reward_mode == 'poaching' else do.payoffs_logging
+    print(f'payoffs {reward_mode} (regret)', np.array(payoffs).shape)
+    regret = np.array(payoffs) - np.array(payoffs).max(axis=0)
+    for p in regret:
+        print('   ', np.round(p, 2))
+
+    print(f'payoffs {reward_mode} (reward)', np.array(payoffs).shape)
+    for p in payoffs:
+        print('   ', np.round(p, 2))
+    return regret
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='MIRROR robust reinforcement learning under minimax regret')
@@ -457,17 +487,20 @@ if __name__ == '__main__':
     logging_attract_vals = read_write_initialization_vals(logging_attract_vals, '_logging_attract_vals.txt', initialization_path, write_initialization, read_initialization)
     
     psi = 1.1 # wildlife growth ratio
-    alpha = .5  # strength that poachers eliminate wildlife
-    eta = .3  # effect of neighbors
+    psi = 1
+    print('NOTE CHANGING psi to 1!')
+    alpha = .5  # strength that poachers eliminate wildlife  # TODO possibly increase?
+    # eta = .3  # effect of neighbors
+    eta = 0  # effect of neighbors, changed 2023.08.10 6:28pm
     if deterrence_setting == 1:
         beta = -5
     elif deterrence_setting == 2:
         beta = -3
     elif deterrence_setting == 3:
-        beta = -8
+        beta = -10 # effect of past patrol, changed 2023.08.10 6:28pm
     print('beta is', beta)
     print('eta is', eta)
-    print('all beta', data['past_effort_vals'])
+    # print('all beta', data['past_effort_vals'])
 
     print('beta {:.3f}, eta {:.3f}'.format(beta, eta))
 
@@ -502,7 +535,7 @@ if __name__ == '__main__':
 
     print('max_epochs {}, n_train agent {}, nature {}'.format(max_epochs, agent_n_train, nature_n_train))
     print('n_targets {}, horizon {}, budget {}'.format(do.n_targets, horizon, budget))
-
+    # import pdb; pdb.set_trace()
     # # baseline: middle of uncertainty interval
     print('########## BASELINE MIDDLE ##########')
     baseline_middle_i = len(do.agent_strategies)
@@ -511,6 +544,9 @@ if __name__ == '__main__':
     for i in range(n_perturb+1):
         param_int = do.hunting_param_int if objective == 'poaching' else do.logging_param_int
         baseline_middle = use_middle(param_int, do.agent_oracle, objective)
+        import pdb; pdb.set_trace()
+        nature_br = do.nature_oracle.best_response([baseline_middle], [1], [objective], objective, display=False)
+
         do.update_payoffs_agent(baseline_middle, policy_mode=objective)
     middle_time = (time.time() - start_time) / (n_perturb+1)
     print('baseline middle runtime {:.1f} seconds'.format(middle_time))
@@ -566,18 +602,85 @@ if __name__ == '__main__':
         a = convert_to_a(nature_strategy, do.logging_param_int)
         print('   ', np.round(a, 3))
 
-    print()
-    print('payoffs poaching (regret)', np.array(do.payoffs_poaching).shape)
-    regret_poaching = np.array(do.payoffs_poaching) - np.array(do.payoffs_poaching).max(axis=0)
-    for p in regret_poaching:
-        print('   ', np.round(p, 2))
-        
-    print()
-    print('payoffs logging (regret)', np.array(do.payoffs_logging).shape)
-    regret_logging = np.array(do.payoffs_logging) - np.array(do.payoffs_logging).max(axis=0)
-    for p in regret_logging:  
-        print('   ', np.round(p, 2))
+    regret_objective = print_regret_stats(objective, do)
+    # Now need to calculate everything for logging!
 
+    # random_nature_br_logging = (np.random.rand(do.n_targets) - .5) * 2
+    # TODO random isn't quite sufficient here because it would be ideal to have nature_brs for all of the possible strategies!
+    # otherwise I think that the regret calculation is gonna be weird? maybe?
+    # import pdb; pdb.set_trace()
+    # agent_opt_strategy_secondary_random = do.agent_oracle.best_response([random_nature_br_logging],
+    #                                                                     [1],
+    #                                                                     do.secondary)
+    # do.update_payoffs_agent(agent_opt_strategy_secondary_random,
+    #                         policy_mode=do.secondary)
+    # do.update_payoffs_nature(random_nature_br_logging, reward_mode=secondary, nature_strategies_secondary_distrib=nature_eq)
+    extra_iters = 5
+
+    nature_strategies = do.nature_strategies_poaching if objective == 'poaching' else do.nature_strategies_logging
+
+    nature_brs = []
+    agent_opt_strategies = []
+    opt_regrets = []
+
+    for i in range(NUM_REWARD_ITERS):
+        nature_br_secondary = do.nature_oracle.best_response(do.agent_strategies,
+                                                            agent_eq,
+                                                            do.agent_policy_modes,
+                                                            do.secondary,
+                                                            nature_strategies_secondary=nature_strategies,
+                                                            nature_strategies_secondary_distrib=nature_eq
+                                                            )
+        agent_opt_strategy_secondary = do.agent_oracle.best_response([nature_br_secondary],
+                                                                    [1],
+                                                                    do.secondary,
+                                                                    verbose=False)
+        opt_reward = do.agent_oracle.simulate_reward([agent_opt_strategy_secondary],
+                                                 [nature_br_secondary],
+                                                 [do.secondary],
+                                                 do.secondary,
+                                                 display=False
+                                                )
+        agent_rewards = []
+        for i, agent_s in enumerate(do.agent_strategies):
+            agent_mode = do.agent_policy_modes[i]
+            rewards = []
+            for _ in range(NUM_REWARD_ITERS):
+                nature_s_secondary = do.get_secondary_nature_strategy(do.secondary, agent_mode, nature_eq)
+                reward = do.agent_oracle.simulate_reward([agent_s],
+                                                           [nature_br_secondary],
+                                                           [agent_mode],
+                                                           do.secondary,
+                                                           display=False,
+                                                           attractiveness_secondary=nature_s_secondary)
+                rewards.append(reward)
+            reward = np.mean(rewards)
+            agent_rewards.append(reward)
+        
+        agent_rewards.append(opt_reward)
+        agent_rewards = np.array(agent_rewards)
+        agent_regrets = agent_rewards - agent_rewards.max()
+        agent_policy_regret = np.array(np.append(agent_eq, 0)) * agent_regrets
+        regret = agent_policy_regret.sum()
+
+        nature_brs.append(nature_br_secondary)
+        agent_opt_strategies.append(agent_opt_strategy_secondary)
+        opt_regrets.append(regret)
+
+    opt_i = np.argmin(opt_regrets)
+    nature_br_secondary = nature_brs[opt_i]
+    agent_opt_strategy_secondary = agent_opt_strategies[opt_i]
+
+    do.update_payoffs_agent(agent_opt_strategy_secondary,
+                            policy_mode=do.secondary)
+    do.update_payoffs_nature(nature_br_secondary,
+                            reward_mode=do.secondary,
+                            nature_strategies_secondary_distrib=nature_eq)
+
+    secondary_param_int = do.logging_param_int if objective == 'poaching' else do.hunting_param_int
+    print('   ', np.round(convert_to_a(nature_br_secondary, secondary_param_int), 3))
+
+    regret_secondary = print_regret_stats(secondary, do)
 
     ##########################################
     # compare and visualize
@@ -625,8 +728,8 @@ if __name__ == '__main__':
         baseline_maximin_regrets_logging[i] = do.compute_payoff_regret(baseline_maximin_distrib, payoff_mode='logging')
     baseline_maximin_regret_poaching = np.min(baseline_maximin_regrets_poaching)
     baseline_maximin_regret_logging = np.min(baseline_maximin_regrets_logging)
-    print('avg regret of baseline maximin {:.3f}'.format(baseline_maximin_regret_poaching))
-    print('avg regret of baseline maximin {:.3f}'.format(baseline_maximin_regret_logging))
+    print('avg regret of baseline maximin poaching {:.3f}'.format(baseline_maximin_regret_poaching))
+    print('avg regret of baseline maximin logging {:.3f}'.format(baseline_maximin_regret_logging))
 
     print('----------- BASELINE RARL REGRETS -----------')
     baseline_RARL_regret_regrets_poaching = np.empty(n_perturb+1)
@@ -644,46 +747,27 @@ if __name__ == '__main__':
     print('avg regret of baseline RARL_regret logging {:.3f}'.format(baseline_RARL_regret_regret_logging))
 
     print('----------- DOUBLE ORACLE -----------')
-    if do.objective == 'poaching':
-        do_regret_poaching = -get_payoff(regret_poaching, agent_eq, nature_eq)
-        print('avg regret of DO poaching {:.3f}'.format(do_regret_poaching))
-    else:
-        do_regret_logging = -get_payoff(regret_logging, agent_eq, nature_eq)
-        print('avg regret of DO logging {:.3f}'.format(do_regret_logging))
+    do_regret_objective = -get_payoff(regret_objective, agent_eq, nature_eq)
+    print('avg regret of DO {} {:.3f}'.format(objective, do_regret_objective))
 
-    nature_strategies = do.nature_strategies_poaching if objective == 'poaching' else do.nature_strategies_logging
-    nature_br_secondary = do.nature_oracle.best_response(do.agent_strategies,
-                                                         agent_eq,
-                                                         do.agent_policy_modes,
-                                                         do.secondary,
-                                                         nature_strategies_secondary=nature_strategies,
-                                                         nature_strategies_secondary_distrib=nature_eq
-                                                         )
-    agent_opt_strategy_secondary = do.agent_oracle.best_response([nature_br_secondary],
-                                                                 [1],
-                                                                  do.secondary)
-
-    do.update_payoffs(nature_br_secondary,
-                      agent_opt_strategy_secondary,
-                      policy_mode=do.secondary,
-                      nature_strategies_secondary_distrib=nature_eq)
-    # do.update_payoffs_nature(nature_br_secondary, payoff_mode=do.secondary)
-    # optimal_reward = do.agent_oracle_secondary.simulate_reward([agent_opt_strategy_secondary], [nature_br_secondary], do.secondary, display=False)  # what about the distribution??
     padded_agent_eq = np.append(agent_eq, 0)
+    # secondary_eq = np.zeros(len(regret_secondary[0]))
+    # secondary_eq[-1] = 1
+    secondary_eq = np.ones(len(regret_secondary[0]))
+    secondary_eq = secondary_eq / secondary_eq.sum()
+    do_regret_secondary = -get_payoff(regret_secondary, padded_agent_eq, secondary_eq)
+    print('avg regret of DO {} {:.3f}'.format(secondary, do_regret_secondary))
 
-    if do.objective == 'poaching':  # calculate for secondary
-        regret_logging = np.array(do.payoffs_logging) - np.array(do.payoffs_logging).max(axis=0)  # recalc because 
-        secondary_eq = np.zeros(len(regret_logging[0]))
-        secondary_eq[-1] = 1
-        do_regret_logging = -get_payoff(regret_logging, padded_agent_eq, secondary_eq)
-        print('avg regret of DO logging {:.3f}'.format(do_regret_logging))
+    if objective == 'poaching':
+        do_regret_poaching = do_regret_objective
+        do_regret_logging = do_regret_secondary
+        regret_poaching = regret_objective
+        regret_logging = regret_secondary
     else:
-        regret_poaching = np.array(do.payoffs_poaching) - np.array(do.payoffs_poaching).max(axis=0)
-        secondary_eq = np.zeros(len(regret_poaching[0]))
-        secondary_eq[-1] = 1
-        do_regret_poaching = -get_payoff(regret_poaching, padded_agent_eq, secondary_eq)
-        print('avg regret of DO poaching {:.3f}'.format(do_regret_poaching))
-
+        do_regret_logging = do_regret_objective
+        do_regret_poaching = do_regret_secondary
+        regret_logging = regret_objective
+        regret_poaching = regret_secondary
 
     print('max_epochs {}, n_train agent {}, nature {}'.format(max_epochs, agent_n_train, nature_n_train))
     print('n_targets {}, horizon {}, budget {}'.format(do.n_targets, horizon, budget))
@@ -756,4 +840,6 @@ if __name__ == '__main__':
 
     with open(results_path + f'_eqs_{str_time}', 'wb') as f:
         pickle.dump([agent_eq, nature_eq], f)
+
+
 

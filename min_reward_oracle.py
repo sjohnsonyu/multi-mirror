@@ -35,7 +35,7 @@ def min_reward(park_params, def_strategy, reward_mode, attractiveness_learning_r
     """
     given a defender strategy, learn updated attractiveness parameters to minimize reward
     """
-
+    batch_size = 8
     if init_attractiveness is None:
         # initialize with random attractiveness values in interval
         attractiveness = (np.random.rand(park_params['n_targets']) - .5) * 2
@@ -44,7 +44,7 @@ def min_reward(park_params, def_strategy, reward_mode, attractiveness_learning_r
         attractiveness = init_attractiveness.copy()
 
     print('attractiveness (raw)', np.round(attractiveness, 3))
-    print('attractiveness (convert)', np.round(convert_to_a(attractiveness, park_params['param_int']), 3))
+    # print('attractiveness (convert)', np.round(convert_to_a(attractiveness, park_params['param_int']), 3))
 
     attractiveness = torch.tensor(attractiveness, requires_grad=True, dtype=torch.float32)
     optimizer = torch.optim.Adam([attractiveness], lr=attractiveness_learning_rate)
@@ -93,7 +93,8 @@ def min_reward(park_params, def_strategy, reward_mode, attractiveness_learning_r
         loss = torch.sum(torch.stack(rewards))
 
         if t % 100 == 99:
-            print('{} {:.2f} {}'.format(t, loss.item(), np.round(convert_to_a(attractiveness.detach().numpy(), park_params['param_int']), 3)))
+            param_int = park_params['param_int'] if reward_mode == 'poaching' else park_params['param_int_logging']
+            print('{} {:.2f} {}'.format(t, loss.item(), np.round(convert_to_a(attractiveness.detach().numpy(), param_int), 3)))
 
         optimizer.zero_grad()
         loss.backward(retain_graph=True)

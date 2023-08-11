@@ -14,6 +14,7 @@ def use_middle(param_int, agent_oracle, reward_mode):
     """ solve optimal reward relative to midpoint of uncertainty interval
     sequential policy, but based on the center of the uncertainty set """
     attractiveness = param_int.mean(axis=1)
+    # attractiveness = np.zeros(param_int.shape[0])  # TODO try this; raw attractiveness
     agent_br = agent_oracle.best_response([attractiveness], [1.], reward_mode, display=True)
     return agent_br
 
@@ -26,7 +27,7 @@ def maximin(park_params, agent_oracle, reward_mode):
     attractiveness = (np.random.rand(park_params['n_targets']) - .5) * 2
     attractiveness = attractiveness.astype(float)
     # batch_size = 64
-    batch_size = 4
+    batch_size = 8
 
     for iter in range(n_iters):
         agent_strategy = agent_oracle.best_response([attractiveness], [1.], reward_mode, display=False)

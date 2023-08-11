@@ -9,7 +9,7 @@ import torch
 import math
 
 PAST_ILLEGAL = False  # use past illegal activity, not past effort
-USE_NEIGHBOR = True   # use neighboring cells
+USE_NEIGHBOR = False   # use neighboring cells
 
 
 def convert_to_a(raw_a, param_int, use_torch=False):
@@ -107,7 +107,7 @@ class Park:
         self.horizon = horizon
 
         self.psi = psi    # wildlife growth ratio
-        self.psi_tree = 1    # wildlife growth ratio
+        self.psi_tree = psi    # tree growth ratio
         self.alpha = alpha  # strength that poachers eliminate wildlife
         self.beta = beta   # coefficient on current effort - likelihood of finding snares
         self.eta = eta    # effect of neighbors
@@ -168,8 +168,8 @@ class Park:
         p_attack_poaching = self.adv_behavior(self.attractiveness_poaching, self.param_int_poaching, action, poaching_use_torch)
         p_attack_logging = self.adv_behavior(self.attractiveness_logging, self.param_int_logging, action, logging_use_torch)
 
-        curr_attack_poaching =  self.get_curr_attack(p_attack_poaching, poaching_use_torch)
-        curr_attack_logging =  self.get_curr_attack(p_attack_logging, logging_use_torch)
+        curr_attack_poaching = self.get_curr_attack(p_attack_poaching, poaching_use_torch)
+        curr_attack_logging = self.get_curr_attack(p_attack_logging, logging_use_torch)
 
         self.effort = action
         curr_wildlife = self.resource_response(self.wildlife, curr_attack_poaching, action, self.psi, poaching_use_torch)
@@ -257,7 +257,6 @@ class Park:
         else:
             a = attractiveness
         
-
 
         if not use_torch and isinstance(past_effort, torch.Tensor):
             past_effort = past_effort.detach().numpy()

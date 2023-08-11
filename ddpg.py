@@ -122,13 +122,14 @@ class NormalizedEnv:
 class DDPG:
     def __init__(self, n_targets, actor_learning_rate=1e-4,
         critic_learning_rate=1e-3, gamma=0.99, tau=1e-2,
-        memory_max_size=50000):
+        memory_max_size=50000, verbose=False):
 
         # params
         self.states_dim = 2 * n_targets + 1
         self.actions_dim = n_targets
         self.gamma = gamma
         self.tau = tau
+        self.verbose = verbose
 
         ##### networks
         # randomly initialize critic and actor network
@@ -174,14 +175,17 @@ class DDPG:
         next_actions = self.actor_target.forward(next_states)
         next_Q = self.critic_target.forward(next_states, next_actions.detach())
         Q_prime = rewards + self.gamma * next_Q
-
         critic_loss = self.loss(Q_vals, Q_prime)
+        if self.verbose:
+            print('critic loss', critic_loss.detach())
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
         self.critic_optimizer.step()
 
         # update actor policy using sampled policy gradient
         policy_loss = -self.critic.forward(states, self.actor.forward(states)).mean()
+        if self.verbose:
+            print('actor loss', policy_loss.detach())
         self.actor_optimizer.zero_grad()
         policy_loss.backward()
         self.actor_optimizer.step()
